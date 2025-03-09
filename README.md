@@ -30,11 +30,19 @@
 4.  **Install Dependencies:**
 
     ```
-    pip install django djangorestframework psycopg2-binary
+    pip install django djangorestframework psycopg2-binary djangorestframework-simplejwt
+    ```
+    
+    ```
+    https://medium.com/@basit26374/how-to-run-postgresql-in-docker-container-with-volume-bound-c141f94e4c5a
     ```
     
 5.  **Database Configuration:**
 
+       ```
+        django-admin startproject auctionhouse backend/
+       ```
+       
     -   Update `backend/auctionhouse/settings.py` with your database credentials:
 
         ```
@@ -50,13 +58,13 @@
         }
         ```
 
-6.  **Apply Migrations:**
+7.  **Apply Migrations:**
 
     ```
     python manage.py makemigrations
     python manage.py migrate
     ```
-7.  **Start the Django Development Server:**
+8.  **Start the Django Development Server:**
 
     ```
     python manage.py runserver
