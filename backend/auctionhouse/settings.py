@@ -37,21 +37,24 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    #Third-part apps
+    #Third-party apps
     "restframework",
-    "corseheaders"
-    "rest_framework_simplejwt"
+    "corseheaders",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist", # Add token blacklist app
     #Local apps
     "apps.accounts",
     "apps.auctions",
     "apps.items",
     "apps.notifications",
-    "apps.transactions"
+    "apps.transactions",
+    "drf_yasg",
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    #CORS Middleware
     'corsheader.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
