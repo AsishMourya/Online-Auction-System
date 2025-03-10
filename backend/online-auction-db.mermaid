@@ -1,0 +1,196 @@
+erDiagram
+    User {
+        int user_id PK
+        string username "Unique, Indexed"
+        string email "Unique, Indexed"
+        string password_hash
+        string first_name "Indexed"
+        string last_name "Indexed"
+        string phone_number
+        datetime created_at
+        datetime updated_at
+        boolean is_active "Indexed"
+    }
+    
+    Role {
+        int role_id PK
+        string role_name "Unique"
+        string description
+    }
+    
+    UserRole {
+        int user_role_id PK
+        int user_id FK "Indexed"
+        int role_id FK "Indexed"
+        datetime assigned_at
+    }
+    
+    Item {
+        int item_id PK
+        int seller_id FK "Indexed"
+        string title "Indexed"
+        text description
+        int category_id FK "Indexed"
+        enum condition "New, Used, Refurbished"
+        datetime created_at "Indexed"
+        datetime updated_at
+        enum status "Pending, Approved, Rejected, Sold"
+        int admin_id FK "Nullable"
+        text reject_reason "Nullable"
+    }
+    
+    ItemImage {
+        int image_id PK
+        int item_id FK "Indexed"
+        string image_url
+        boolean is_primary "Indexed"
+        datetime upload_date
+    }
+    
+    Category {
+        int category_id PK
+        string name "Unique, Indexed"
+        int parent_category_id FK "Indexed, Nullable"
+        string description
+    }
+    
+    Auction {
+        int auction_id PK
+        int item_id FK "Indexed, Unique"
+        datetime start_time "Indexed"
+        datetime end_time "Indexed"
+        decimal starting_bid
+        decimal reserve_price
+        decimal bid_increment
+        enum status "Upcoming, Active, Ended, Cancelled"
+        datetime created_at
+        datetime updated_at
+        int extended_count "Default 0"
+        datetime last_extended_at "Nullable"
+    }
+    
+    AuctionHistory {
+        int history_id PK
+        int auction_id FK "Indexed"
+        enum action "Created, Started, Extended, Ended, Cancelled"
+        datetime timestamp "Indexed"
+        int admin_id FK "Nullable"
+        text reason "Reason for action"
+    }
+    
+    Bid {
+        int bid_id PK
+        int auction_id FK "Indexed"
+        int bidder_id FK "Indexed"
+        decimal bid_amount "Indexed"
+        datetime bid_time "Indexed"
+        boolean is_auto_bid "Default false"
+        decimal max_auto_bid_amount "Nullable"
+        enum bid_status "Active, Outbid, Won"
+    }
+    
+    Transaction {
+        int transaction_id PK
+        int auction_id FK "Indexed, Unique"
+        int seller_id FK "Indexed"
+        int buyer_id FK "Indexed"
+        decimal final_amount
+        datetime transaction_date "Indexed"
+        enum payment_status "Pending, Completed, Failed, Refunded"
+        enum shipping_status "Not Shipped, Shipped, Delivered"
+        string tracking_number
+        int payment_method_id FK
+        int shipping_address_id FK
+    }
+    
+    Notification {
+        int notification_id PK
+        int user_id FK "Indexed"
+        text message
+        enum type "Outbid, AuctionEnded, ItemSold, etc."
+        datetime created_at "Indexed"
+        boolean is_read "Default false"
+        int related_auction_id FK "Nullable"
+        int related_item_id FK "Nullable"
+        int related_bid_id FK "Nullable"
+    }
+    
+    PaymentMethod {
+        int payment_method_id PK
+        int user_id FK "Indexed"
+        enum payment_type "Credit Card, PayPal, etc."
+        string account_number "Encrypted"
+        date expiry_date
+        boolean is_default "Indexed"
+        datetime created_at
+        datetime updated_at
+    }
+    
+    ShippingAddress {
+        int address_id PK
+        int user_id FK "Indexed"
+        string address_line1
+        string address_line2
+        string city "Indexed"
+        string state "Indexed"
+        string postal_code "Indexed"
+        string country "Indexed"
+        boolean is_default "Indexed"
+        datetime created_at
+        datetime updated_at
+    }
+    
+    Feedback {
+        int feedback_id PK
+        int transaction_id FK "Indexed"
+        int reviewer_id FK "Indexed"
+        int reviewee_id FK "Indexed"
+        int rating "1-5 scale"
+        text comment
+        datetime created_at "Indexed"
+    }
+    
+    AuditLog {
+        int log_id PK
+        string action "Indexed"
+        int user_id FK "Indexed"
+        string table_affected "Indexed"
+        int record_id "Indexed"
+        text old_values "JSON format"
+        text new_values "JSON format"
+        datetime timestamp "Indexed"
+        string ip_address
+    }
+    
+    WatchList {
+        int watchlist_id PK
+        int user_id FK "Indexed"
+        int auction_id FK "Indexed"
+        datetime added_at
+    }
+
+    User ||--o{ UserRole : has
+    Role ||--o{ UserRole : "assigned to"
+    User ||--o{ Item : sells
+    User ||--o{ Bid : places
+    User ||--o{ AuctionHistory : "performs admin actions"
+    Category ||--o{ Item : categorizes
+    Category ||--o{ Category : "parent of"
+    Item ||--o{ ItemImage : has
+    Item ||--|| Auction : "listed in"
+    Auction ||--o{ Bid : receives
+    Auction ||--o| Transaction : "results in"
+    Auction ||--o{ AuctionHistory : logs
+    User ||--o{ Transaction : "buys in"
+    User ||--o{ Transaction : "sells in"
+    User ||--o{ Notification : receives
+    User ||--o{ PaymentMethod : has
+    User ||--o{ ShippingAddress : has
+    Transaction ||--o| Feedback : "rated through"
+    Transaction ||--|| PaymentMethod : "paid with"
+    Transaction ||--|| ShippingAddress : "shipped to"
+    User ||--o{ Feedback : gives
+    User ||--o{ Feedback : receives
+    User ||--o{ AuditLog : generates
+    User ||--o{ WatchList : has
+    Auction ||--o{ WatchList : "watched by"
