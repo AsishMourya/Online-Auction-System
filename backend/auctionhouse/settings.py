@@ -93,7 +93,7 @@ DATABASES = {
         'NAME': 'auction_house',
         'USER': 'panda',
         'PASSWORD': 'panda',
-        'HOST': 'localhost',
+        'HOST': '0.0.0.0',
         'PORT': '5433',
     }
 }
