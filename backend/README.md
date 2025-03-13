@@ -42,7 +42,7 @@ The backend currently has the following features implemented:
 2. Create and activate a virtual environment
    ```bash
    python -m venv venv
-   .\venv\Scripts\activate
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
 3. Install dependencies
@@ -96,8 +96,8 @@ make db-clear
 ```
 
 The Docker container uses configuration from your .env file:
-- Database: Value from DB_NAME in .env (default: auction_house)
-- User: Value from DB_USER in .env (default: panda)
+- Database: Value from DB_NAME in .env (default: auctionhouse)
+- User: Value from DB_USER in .env (default: django_user)
 - Password: Value from DB_PASSWORD in .env (default: panda)
 - Port: Value from DB_PORT in .env (default: 5433 mapped from container's 5432)
 
