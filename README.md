@@ -34,29 +34,29 @@ The backend currently has the following features implemented:
 ### Environment Setup
 
 1. Clone the repository (if you haven't already)
-   ```bash
+```bash
    git clone [repository-url]
-   cd backend
+   cd auctionhouse/backend
    ```
 
 2. Create and activate a virtual environment
-   ```bash
+```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
 3. Install dependencies
-   ```bash
+```bash
    pip install -r requirements.txt
    ```
 
 4. Set up environment variables
-   ```bash
+```bash
   # Create a .env file from the template
-   copy .env.example .env
+    copy .env.example .env
 
-   # Open the file in Notepad to edit
-   notepad .env
+  # Open the file in Notepad to edit
+    notepad .env
    ```
 
 ### Database Setup
