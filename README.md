@@ -36,7 +36,7 @@ The backend currently has the following features implemented:
 1. Clone the repository (if you haven't already)
    ```bash
    git clone [repository-url]
-   cd auctionhouse/backend
+   cd backend
    ```
 
 2. Create and activate a virtual environment
