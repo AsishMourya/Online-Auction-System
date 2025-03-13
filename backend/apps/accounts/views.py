@@ -219,7 +219,7 @@ class AddressViewSet(viewsets.ModelViewSet):
     @swagger_auto_schema(
         operation_summary="Delete address",
         operation_description="Delete an existing address.",
-        responses={204: "No Content", 404: "Not Found"},
+        responses={204: "No Content", 404: "Not Found", 400: "Bad Request"},
     )
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -307,7 +307,7 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
     @swagger_auto_schema(
         operation_summary="Delete payment method",
         operation_description="Delete an existing payment method.",
-        responses={204: "No Content", 404: "Not Found"},
+        responses={204: "No Content", 404: "Not Found", 400: "Bad Request"},
     )
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()

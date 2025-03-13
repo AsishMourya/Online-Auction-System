@@ -145,7 +145,25 @@ class Address(models.Model):
             )
         elif not self.pk and not Address.objects.filter(user=self.user).exists():
             self.is_default = True
+        elif (
+            not self.is_default
+            and not Address.objects.filter(user=self.user, is_default=True)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            self.is_default = True
+
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.is_default:
+            other_address = (
+                Address.objects.filter(user=self.user).exclude(pk=self.pk).first()
+            )
+            if other_address:
+                other_address.is_default = True
+                other_address.save()
+        super().delete(*args, **kwargs)
 
 
 class PaymentMethod(models.Model):
@@ -177,9 +195,32 @@ class PaymentMethod(models.Model):
 
     def save(self, *args, **kwargs):
         if self.is_default:
+            # Unset any other default payment method for this user
             PaymentMethod.objects.filter(user=self.user, is_default=True).update(
                 is_default=False
             )
         elif not self.pk and not PaymentMethod.objects.filter(user=self.user).exists():
+            # First payment method for this user, set as default
             self.is_default = True
+        elif (
+            not self.is_default
+            and not PaymentMethod.objects.filter(user=self.user, is_default=True)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            # No other default payment method exists, make this one default
+            self.is_default = True
+
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # If this is the default payment method, set another payment method as default before deleting
+        if self.is_default:
+            # Find another payment method to make default
+            other_payment_method = (
+                PaymentMethod.objects.filter(user=self.user).exclude(pk=self.pk).first()
+            )
+            if other_payment_method:
+                other_payment_method.is_default = True
+                other_payment_method.save()
+        super().delete(*args, **kwargs)
