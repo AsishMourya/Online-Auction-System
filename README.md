@@ -34,29 +34,29 @@ The backend currently has the following features implemented:
 ### Environment Setup
 
 1. Clone the repository (if you haven't already)
-```bash
+   ```bash
    git clone [repository-url]
    cd auctionhouse/backend
    ```
 
 2. Create and activate a virtual environment
-```bash
+   ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
 3. Install dependencies
-```bash
+   ```bash
    pip install -r requirements.txt
    ```
 
 4. Set up environment variables
-```bash
-  # Create a .env file from the template
-    copy .env.example .env
-
-  # Open the file in Notepad to edit
-    notepad .env
+   ```bash
+   # Initialize the environment setup (creates .env from .env.example if needed)
+   make env-setup
+   
+   # Modify the .env file with your settings
+   nano .env
    ```
 
 ### Database Setup
@@ -64,24 +64,35 @@ The backend currently has the following features implemented:
 The project uses PostgreSQL running in Docker. You can manage the database using the provided Makefile commands:
 
 ```bash
-# Start Docker Desktop first, then:
-
 # Start the PostgreSQL container
-docker-compose up -d
+make db-start
 
-# Create database
-docker exec -it auction_house_postgres psql -U django_user -c "CREATE DATABASE auctionhouse;"
+# Wait for the database to be ready
+make db-wait
 
-# Backup database
-mkdir -p backups
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-docker exec -it auction_house_postgres pg_dump -U django_user auctionhouse > "backups/auctionhouse_$timestamp.sql"
-
-# Restore from backup
-docker exec -i auction_house_postgres psql -U django_user auctionhouse < backups/filename.sql
+# Create database and optionally restore from a backup
+make db-create
+# This will create the database if needed and offer to restore from a backup
 
 # Stop the PostgreSQL container
-docker-compose down
+make db-stop
+
+# Create a database backup
+make db-backup
+# This will create a timestamped SQL dump in the backups/ directory
+
+# Restore from a backup file
+make db-restore
+# This will show available backups and guide you through the restoration process
+# You can also specify a file directly: make db-restore file=backups/db_filename.sql
+# WARNING: This will completely replace all data in the database
+
+# Interactive database management menu
+make db-settings
+# Provides a menu-driven interface for all database operations
+
+# Clear database (WARNING: destructive)
+make db-clear
 ```
 
 The Docker container uses configuration from your .env file:
@@ -96,23 +107,34 @@ Use the provided Makefile commands to manage the project:
 
 ```bash
 # Run database migrations
-python manage.py makemigrations
-python manage.py migrate
+make migrations    # Create migration files
+make migrate       # Apply migrations to database
 
 # Create a superuser
-python manage.py createsuperuser
+make superuser
 
 # Run the development server
-python manage.py runserver              # Normal mode
-python manage.py runserver --settings=auctionhouse.settings.dev  # With debug toolbar
+make run           # Normal mode
+make run-dev       # With debug toolbar
 
+# Testing and code quality
+make test          # Run tests
+make test-coverage # Run tests with coverage report
+make lint          # Check code style with flake8
+make format        # Format code using black
+
+# Quick initial setup (database, environment, migrations)
+make setup
+
+# See all available commands
+make help
 ```
 
 ### Running the Development Server
 
 Start the Django development server:
 ```bash
-python manage.py runserver
+make run
 ```
 
 The API will be available at http://127.0.0.1:8000/
