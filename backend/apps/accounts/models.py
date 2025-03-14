@@ -1,162 +1,226 @@
 from django.db import models
-from django.contrib.auth.models import (
-    AbstractBaseUser,
-    BaseUserManager,
-    PermissionsMixin,
-)
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+import re
 
 
-class UserManager(BaseUserManager):
-    def create_user(self, username, email, password=None, **extra_fields):
-        if username is None:
-            raise ValueError("Users must have a username.")
-        if email is None:
-            raise ValueError("Users must have an email address.")
-        if password is None:
-            raise ValueError("Users must have a password.")
-        user = self.model(
-            username=username, email=self.normalize_email(email), **extra_fields
-        )
+def validate_phone_number(value):
+    if value:
+        digits_only = "".join(filter(str.isdigit, str(value)))
+        if len(digits_only) != 10:
+            raise ValidationError(_("Phone number must contain exactly 10 digits."))
+
+
+class CustomUserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError(_("The Email field must be set"))
+        email = self.normalize_email(email)
+
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if not re.match(email_pattern, email):
+            raise ValueError(_("Enter a valid email address"))
+
+        user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save()
         return user
 
-    def create_superuser(self, username, email, password=None, **extra_fields):
-        if password is None:
-            raise ValueError("Users must have a password.")
-        extra_fields.setdefault("is_superuser", True)
+    def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
-        user = self.create_user(username, email, password, **extra_fields)
-        user.save()
-        return user
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
+        extra_fields.setdefault("role", User.ADMIN)
+
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError(_("Superuser must have is_staff=True."))
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError(_("Superuser must have is_superuser=True."))
+
+        return self.create_user(email, password, **extra_fields)
 
 
-class UserRoles(models.Model):
+class User(AbstractUser):
     ADMIN = "admin"
-    SELLER = "seller"
-    BUYER = "buyer"
     STAFF = "staff"
+    BIDDER = "bidder"
+    BUYER = "buyer"
+    SELLER = "seller"
 
-    USER_ROLES = [
+    ROLE_CHOICES = [
         (ADMIN, "Admin"),
-        (SELLER, "Seller"),
-        (BUYER, "Buyer"),
         (STAFF, "Staff"),
+        (BIDDER, "Bidder"),
+        (BUYER, "Buyer"),
+        (SELLER, "Seller"),
     ]
 
-    role_id = models.AutoField(primary_key=True)
-    role_name = models.CharField(max_length=50, choices=USER_ROLES, default=BUYER)
-    description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def _str_(self):
-        return self.role_name
-
-    class Meta:
-        db_table = "user_roles"
-
-
-# User Model
-class User(AbstractBaseUser, PermissionsMixin):
-    user_id = models.AutoField(primary_key=True)
-    username = models.CharField(max_length=100, unique=True)
-    email = models.EmailField(unique=True)
-    first_name = models.CharField(max_length=50, blank=False)
-    last_name = models.CharField(max_length=50, blank=True)
-    role = models.ForeignKey(
-        UserRoles, on_delete=models.CASCADE, default=UserRoles.BUYER
+    username = None
+    email = models.EmailField(_("email address"), unique=True)
+    first_name = models.CharField(_("first name"), max_length=150)
+    last_name = models.CharField(_("last name"), max_length=150)
+    phone_number = models.CharField(
+        _("phone number"),
+        max_length=20,
+        blank=True,
+        null=True,
+        validators=[validate_phone_number],
     )
-    is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)
-    is_superuser = models.BooleanField(default=False)
+    role = models.CharField(
+        _("role"), max_length=10, choices=ROLE_CHOICES, default=BUYER
+    )
+    is_active = models.BooleanField(_("active status"), default=True)
+    signup_datetime = models.DateTimeField(_("signup date"), auto_now_add=True)
+    last_login_datetime = models.DateTimeField(_("last login"), null=True, blank=True)
+
+    groups = models.ManyToManyField(
+        "auth.Group",
+        verbose_name=_("groups"),
+        blank=True,
+        help_text=_(
+            "The groups this user belongs to. A user will get all permissions "
+            "granted to each of their groups."
+        ),
+        related_name="custom_user_set",
+        related_query_name="custom_user",
+    )
+    user_permissions = models.ManyToManyField(
+        "auth.Permission",
+        verbose_name=_("user permissions"),
+        blank=True,
+        help_text=_("Specific permissions for this user."),
+        related_name="custom_user_set",
+        related_query_name="custom_user",
+    )
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["first_name", "last_name"]
+
+    objects = CustomUserManager()
+
+    def __str__(self):
+        return f"{self.email} ({self.get_role_display()})"
+
+    def clean(self):
+        """Validate model fields."""
+        super().clean()
+
+        if self.phone_number:
+            validate_phone_number(self.phone_number)
+
+        if self.email:
+            self.email = self.email.lower()
+
+    def save(self, *args, **kwargs):
+        self.clean()
+
+        if self.pk is not None:
+            self.last_login_datetime = timezone.now()
+        super().save(*args, **kwargs)
+
+
+class Address(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="addresses")
+    address_line1 = models.CharField(_("address line 1"), max_length=255)
+    address_line2 = models.CharField(
+        _("address line 2"), max_length=255, blank=True, null=True
+    )
+    city = models.CharField(_("city"), max_length=100)
+    state = models.CharField(_("state/province"), max_length=100)
+    postal_code = models.CharField(_("postal code"), max_length=20)
+    country = models.CharField(_("country"), max_length=100)
+    is_default = models.BooleanField(_("default address"), default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    objects = UserManager()
-
-    USERNAME_FIELD = "username"
-    REQUIRED_FIELDS = ["email", "first_name", "password"]
-
-    def _str_(self):
-        return self.username
-
-    class Meta:
-        db_table = "users"
-
-
-class ShippingAddress(models.Model):
-    address_id = models.AutoField(primary_key=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    address_line_1 = models.TextField(max_length=255)
-    address_line_2 = models.TextField(max_length=255, blank=True)
-    city = models.CharField(max_length=50)
-    state = models.CharField(max_length=50)
-    zip_code = models.CharField(max_length=10)
-    country = models.CharField(max_length=50)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = "shipping_addresses"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user"],
-                condition=models.Q(is_default=True),
-                name="unique_default_address",
-            )
-        ]
-
-    def _str_(self):
-        return f"{self.address_line_1}, {self.city}, {self.state}, {self.zip_code}, {self.country} for {self.user.username}"
+    def __str__(self):
+        return f"{self.address_line1}, {self.city}, {self.country}"
 
     def save(self, *args, **kwargs):
         if self.is_default:
-            try:
-                temp = ShippingAddress.objects.get(user=self.user, is_default=True)
-                if self != temp:
-                    temp.is_default = False
-                    temp.save()
-            except ShippingAddress.DoesNotExist:
-                pass
+            Address.objects.filter(user=self.user, is_default=True).update(
+                is_default=False
+            )
+        elif not self.pk and not Address.objects.filter(user=self.user).exists():
+            self.is_default = True
+        elif (
+            not self.is_default
+            and not Address.objects.filter(user=self.user, is_default=True)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            self.is_default = True
+
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.is_default:
+            other_address = (
+                Address.objects.filter(user=self.user).exclude(pk=self.pk).first()
+            )
+            if other_address:
+                other_address.is_default = True
+                other_address.save()
+        super().delete(*args, **kwargs)
 
 
 class PaymentMethod(models.Model):
-    class PaymentType(models.TextChoices):
-        CREDIT_CARD = "credit_card"
-        DEBIT_CARD = "debit_card"
-        PAYPAL = "paypal"
-        BANKTRANSFER = "bank_transfer"
-        CRYPTOCURRENCY = "cryptocurrency"
+    CREDIT_CARD = "credit_card"
+    DEBIT_CARD = "debit_card"
+    CRYPTO = "crypto"
+    BANK = "bank"
 
-    payment_id = models.AutoField(primary_key=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    payment_type = models.CharField(max_length=50, choices=PaymentType.choices)
-    is_default = models.BooleanField(default=False)
+    PAYMENT_TYPE_CHOICES = [
+        (CREDIT_CARD, "Credit Card"),
+        (DEBIT_CARD, "Debit Card"),
+        (CRYPTO, "Cryptocurrency"),
+        (BANK, "Bank Transfer"),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="payment_methods"
+    )
+    payment_type = models.CharField(
+        _("payment type"), max_length=20, choices=PAYMENT_TYPE_CHOICES
+    )
+    provider = models.CharField(_("provider name"), max_length=100)
+    account_identifier = models.CharField(_("account identifier"), max_length=100)
+    is_default = models.BooleanField(_("default payment method"), default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        db_table = "payment_methods"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user"],
-                condition=models.Q(is_default=True),
-                name="unique_default_payment",
-            )
-        ]
-
-    def _str_(self):
-        return f"{self.payment_type} for {self.user.username}"
+    def __str__(self):
+        return f"{self.get_payment_type_display()} - {self.provider}"
 
     def save(self, *args, **kwargs):
         if self.is_default:
-            try:
-                temp = PaymentMethod.objects.get(user=self.user, is_default=True)
-                if self != temp:
-                    temp.is_default = False
-                    temp.save()
-            except PaymentMethod.DoesNotExist:
-                pass
+            # Unset any other default payment method for this user
+            PaymentMethod.objects.filter(user=self.user, is_default=True).update(
+                is_default=False
+            )
+        elif not self.pk and not PaymentMethod.objects.filter(user=self.user).exists():
+            # First payment method for this user, set as default
+            self.is_default = True
+        elif (
+            not self.is_default
+            and not PaymentMethod.objects.filter(user=self.user, is_default=True)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            # No other default payment method exists, make this one default
+            self.is_default = True
+
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # If this is the default payment method, set another payment method as default before deleting
+        if self.is_default:
+            # Find another payment method to make default
+            other_payment_method = (
+                PaymentMethod.objects.filter(user=self.user).exclude(pk=self.pk).first()
+            )
+            if other_payment_method:
+                other_payment_method.is_default = True
+                other_payment_method.save()
+        super().delete(*args, **kwargs)
