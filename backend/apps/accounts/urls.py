@@ -1,65 +1,41 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import (
-    TokenRefreshView,
-    TokenVerifyView,
-)
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
-    UserRegistrationView,
-    UserLoginView,
-    UserProfileView,
     AddressViewSet,
+    CustomTokenObtainPairView,
     PaymentMethodViewSet,
-    ChangePasswordView,
-    LogoutView,
-    get_default_address,
-    get_default_payment_method,
+    UserProfileViewSet,
+    UserRegistrationView,
+    logout_view,
 )
-
 from .admin_views import (
     AdminUserManagementViewSet,
     admin_dashboard,
     all_addresses,
-    user_addresses,
     all_payment_methods,
+    user_addresses,
     user_payment_methods,
 )
 
-# Setup nested routers for better resource organization
+# Setup router for standard API endpoints
 router = DefaultRouter()
-router.register(r"users/me/addresses", AddressViewSet, basename="user-address")
-router.register(
-    r"users/me/payment-methods", PaymentMethodViewSet, basename="user-payment-method"
-)
+router.register(r"profile", UserProfileViewSet, basename="profile")
+router.register(r"addresses", AddressViewSet, basename="address")
+router.register(r"payment-methods", PaymentMethodViewSet, basename="payment-method")
 
-# Admin router
+# Setup router for admin API endpoints
 admin_router = DefaultRouter()
-admin_router.register(
-    r"users", AdminUserManagementViewSet, basename="admin-user-management"
-)
+admin_router.register(r"users", AdminUserManagementViewSet, basename="admin-user")
 
 urlpatterns = [
-    # Authentication endpoints
-    path("auth/register/", UserRegistrationView.as_view(), name="user-register"),
-    path("auth/login/", UserLoginView.as_view(), name="user-login"),
-    path("auth/logout/", LogoutView.as_view(), name="user-logout"),
-    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-    path("auth/token/verify/", TokenVerifyView.as_view(), name="token-verify"),
-    # User profile endpoints
-    path("users/me/", UserProfileView.as_view(), name="user-profile"),
-    path(
-        "users/me/change-password/",
-        ChangePasswordView.as_view(),
-        name="change-password",
-    ),
-    path("users/me/default-address/", get_default_address, name="default-address"),
-    path(
-        "users/me/default-payment-method/",
-        get_default_payment_method,
-        name="default-payment-method",
-    ),
-    # Admin endpoints
+    # Auth endpoints
+    path("token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("register/", UserRegistrationView.as_view(), name="register"),
+    path("logout/", logout_view, name="logout"),
+    path("", include(router.urls)),
     path("admin/", include(admin_router.urls)),
     path("admin/dashboard/", admin_dashboard, name="admin-dashboard"),
     path("admin/addresses/", all_addresses, name="admin-all-addresses"),
@@ -76,6 +52,4 @@ urlpatterns = [
         user_payment_methods,
         name="admin-user-payment-methods",
     ),
-    # Include default router for all other endpoints
-    path("", include(router.urls)),
 ]

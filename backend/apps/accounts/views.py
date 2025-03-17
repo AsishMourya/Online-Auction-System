@@ -1,5 +1,3 @@
-from django.contrib.auth import update_session_auth_hash
-from django.db import transaction
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import generics, permissions, status, viewsets
@@ -12,499 +10,296 @@ from .models import Address, PaymentMethod
 from .permissions import IsOwner
 from .serializers import (
     AddressSerializer,
-    ChangePasswordSerializer,
     PaymentMethodSerializer,
-    UserLoginSerializer,
     UserProfileSerializer,
     UserProfileBasicSerializer,
     UserRegistrationSerializer,
 )
 
+from django.utils import timezone
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
-    return {
-        "refresh": str(refresh),
-        "access": str(refresh.access_token),
-    }
+from .models import User
+from .serializers import (
+    CustomTokenObtainPairSerializer,
+    UserPasswordChangeSerializer,
+)
+
+from apps.core.mixins import SwaggerSchemaMixin
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+    @swagger_auto_schema(
+        operation_summary="Obtain JWT tokens",
+        operation_description="Get access and refresh tokens by providing email and password",
+        responses={200: CustomTokenObtainPairSerializer},
+        tags=["Authentication"],
+    )
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+
+        if response.status_code == 200 and request.data.get("email"):
+            user = User.objects.filter(email=request.data.get("email")).first()
+            if user:
+                user.last_login_datetime = timezone.now()
+                user.save(update_fields=["last_login_datetime"])
+
+        return response
 
 
 class UserRegistrationView(generics.CreateAPIView):
+    permission_classes = [permissions.AllowAny]
     serializer_class = UserRegistrationSerializer
-    permission_classes = [permissions.AllowAny]
 
     @swagger_auto_schema(
-        operation_id="register_user",
-        operation_summary="Register a new user",
-        operation_description="Create a new user account with email, password, and profile information.",
+        operation_summary="Register new user",
+        operation_description="Create a new user account",
+        responses={201: "User registered successfully"},
         tags=["Authentication"],
-        responses={201: UserProfileBasicSerializer, 400: "Bad Request"},
-    )
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(
-            data=request.data, context={"request": request}
-        )
-        if serializer.is_valid():
-            with transaction.atomic():
-                user = serializer.save()
-
-                tokens = get_tokens_for_user(user)
-                profile_serializer = UserProfileBasicSerializer(user)
-
-                return Response(
-                    {
-                        "message": "User registered successfully.",
-                        "tokens": tokens,
-                        "user": profile_serializer.data,
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
-        return Response(
-            {"message": "Registration failed", "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-
-class UserLoginView(generics.GenericAPIView):
-    serializer_class = UserLoginSerializer
-    permission_classes = [permissions.AllowAny]
-
-    @swagger_auto_schema(
-        operation_id="login_user",
-        operation_summary="Login user",
-        operation_description="Authenticate user with email and password.",
-        tags=["Authentication"],
-        responses={
-            200: openapi.Response("Login Successful", UserProfileBasicSerializer),
-            400: "Bad Request",
-        },
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.validated_data["user"]
+            user = serializer.save()
 
-            tokens = get_tokens_for_user(user)
+            refresh = RefreshToken.for_user(user)
+
             return Response(
                 {
-                    "message": "Login successful.",
-                    "tokens": tokens,
+                    "message": "User registered successfully",
                     "user": UserProfileBasicSerializer(user).data,
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
                 },
-                status=status.HTTP_200_OK,
+                status=status.HTTP_201_CREATED,
             )
-        return Response(
-            {"message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class UserProfileView(generics.RetrieveUpdateAPIView):
+class UserProfileViewSet(viewsets.ModelViewSet):
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwner]
+    http_method_names = ["get", "put", "patch", "head", "options"]
+
+    def get_queryset(self):
+        return User.objects.filter(id=self.request.user.id)
 
     @swagger_auto_schema(
-        operation_id="get_user_profile",
         operation_summary="Get user profile",
-        operation_description="Retrieve logged in user's profile information including addresses and payment methods.",
-        tags=["User Profile"],
+        operation_description="Get current user's profile details",
         responses={200: UserProfileSerializer},
+        tags=["Users"],
     )
-    def get_object(self):
-        return self.request.user
+    def list(self, request, *args, **kwargs):
+        user = request.user
+        serializer = self.get_serializer(user)
+        return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_id="update_user_profile",
         operation_summary="Update user profile",
-        operation_description="Update logged in user's profile information.",
-        tags=["User Profile"],
-        responses={200: UserProfileSerializer, 400: "Bad Request"},
+        operation_description="Update current user's profile",
+        responses={200: UserProfileSerializer},
+        tags=["Users"],
     )
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
-        instance = self.get_object()
+        instance = request.user
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
-        if "role" in request.data:
-            return Response(
-                {"message": "You don't have permission to change role."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if "phone_number" in request.data:
-            phone = request.data["phone_number"]
-            if phone:
-                digits_only = "".join(filter(str.isdigit, phone))
-                if len(digits_only) != 10:
-                    return Response(
-                        {"message": "Phone number must contain exactly 10 digits."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                request.data["phone_number"] = digits_only
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {"message": "Profile updated successfully.", "user": serializer.data}
-            )
-        return Response(
-            {"message": "Profile update failed", "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
+    @swagger_auto_schema(
+        operation_summary="Change password",
+        operation_description="Change user's password",
+        request_body=UserPasswordChangeSerializer,
+        responses={200: "Password changed successfully"},
+        tags=["Users"],
+    )
+    @action(detail=False, methods=["post"])
+    def change_password(self, request):
+        user = request.user
+        serializer = UserPasswordChangeSerializer(
+            data=request.data, context={"request": request}
         )
 
+        if serializer.is_valid():
+            old_password = serializer.validated_data.get("old_password")
+            new_password = serializer.validated_data.get("new_password")
 
-class AddressViewSet(viewsets.ModelViewSet):
+            if not user.check_password(old_password):
+                return Response(
+                    {"old_password": "Incorrect password"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            user.set_password(new_password)
+            user.save()
+
+            return Response({"message": "Password changed successfully"})
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AddressViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
     serializer_class = AddressSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwner]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if getattr(self, "swagger_fake_view", False):
-            return Address.objects.none()
+        if self.is_swagger_request:
+            return self.get_swagger_empty_queryset()
         return Address.objects.filter(user=self.request.user)
 
     @swagger_auto_schema(
-        operation_id="list_addresses",
         operation_summary="List user addresses",
-        operation_description="Get all addresses for the logged in user.",
-        tags=["User Address"],
+        operation_description="Get all addresses for current user",
         responses={200: AddressSerializer(many=True)},
+        tags=["Addresses"],
     )
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(
-            {
-                "message": "Addresses retrieved successfully.",
-                "addresses": serializer.data,
-            }
-        )
+        return super().list(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_id="create_address",
-        operation_summary="Add address",
-        operation_description="Add a new address for the logged in user.",
-        tags=["User Address"],
-        responses={201: AddressSerializer, 400: "Bad Request"},
+        operation_summary="Create address",
+        operation_description="Add a new address for current user",
+        responses={201: AddressSerializer},
+        tags=["Addresses"],
     )
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {"message": "Address added successfully.", "address": serializer.data},
-                status=status.HTTP_201_CREATED,
+        serializer.is_valid(raise_exception=True)
+
+        serializer.validated_data["user"] = request.user
+
+        is_default = serializer.validated_data.get("is_default", False)
+
+        if not Address.objects.filter(user=request.user).exists():
+            serializer.validated_data["is_default"] = True
+        elif is_default:
+            Address.objects.filter(user=request.user, is_default=True).update(
+                is_default=False
             )
+
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
         return Response(
-            {"message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
         )
 
     @swagger_auto_schema(
-        operation_id="retrieve_address",
-        operation_summary="Get address details",
-        operation_description="Get details of a specific address.",
-        tags=["User Address"],
-        responses={200: AddressSerializer, 404: "Not Found"},
-    )
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(
-            {"message": "Address details retrieved.", "address": serializer.data}
-        )
-
-    @swagger_auto_schema(
-        operation_id="update_address",
-        operation_summary="Update address",
-        operation_description="Update an existing address.",
-        tags=["User Address"],
-        responses={200: AddressSerializer, 400: "Bad Request", 404: "Not Found"},
-    )
-    def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {"message": "Address updated successfully.", "address": serializer.data}
-            )
-        return Response(
-            {"message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    @swagger_auto_schema(
-        operation_id="delete_address",
-        operation_summary="Delete address",
-        operation_description="Delete an existing address.",
-        tags=["User Address"],
-        responses={204: "No Content", 404: "Not Found", 400: "Bad Request"},
-    )
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        instance.delete()
-        return Response(
-            {"message": "Address deleted successfully."},
-            status=status.HTTP_204_NO_CONTENT,
-        )
-
-    @swagger_auto_schema(
-        operation_id="set_default_address",
         operation_summary="Set default address",
-        operation_description="Set an address as the default shipping address.",
-        tags=["User Address"],
-        responses={200: AddressSerializer, 404: "Not Found"},
+        operation_description="Set an address as default",
+        responses={200: AddressSerializer},
+        tags=["Addresses"],
     )
     @action(detail=True, methods=["post"])
     def set_default(self, request, pk=None):
         address = self.get_object()
-        address.is_default = True
-        address.save()
-        return Response(
-            {
-                "message": "Default address updated successfully.",
-                "address": AddressSerializer(address).data,
-            }
+
+        Address.objects.filter(user=request.user, is_default=True).update(
+            is_default=False
         )
 
+        address.is_default = True
+        address.save()
 
-class PaymentMethodViewSet(viewsets.ModelViewSet):
+        serializer = self.get_serializer(address)
+        return Response(serializer.data)
+
+
+class PaymentMethodViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
     serializer_class = PaymentMethodSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwner]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if getattr(self, "swagger_fake_view", False):
-            return PaymentMethod.objects.none()
+        if self.is_swagger_request:
+            return self.get_swagger_empty_queryset()
         return PaymentMethod.objects.filter(user=self.request.user)
 
     @swagger_auto_schema(
-        operation_id="list_payment_methods",
         operation_summary="List payment methods",
-        operation_description="Get all payment methods for the logged in user.",
-        tags=["User Payment Methods"],
+        operation_description="Get all payment methods for current user",
         responses={200: PaymentMethodSerializer(many=True)},
+        tags=["Payment Methods"],
     )
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(
-            {
-                "message": "Payment methods retrieved successfully.",
-                "payment_methods": serializer.data,
-            }
-        )
+        return super().list(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_id="create_payment_method",
-        operation_summary="Add payment method",
-        operation_description="Add a new payment method for the logged in user.",
-        tags=["User Payment Methods"],
-        responses={201: PaymentMethodSerializer, 400: "Bad Request"},
+        operation_summary="Create payment method",
+        operation_description="Add a new payment method for current user",
+        responses={201: PaymentMethodSerializer},
+        tags=["Payment Methods"],
     )
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {
-                    "message": "Payment method added successfully.",
-                    "payment_method": serializer.data,
-                },
-                status=status.HTTP_201_CREATED,
+        serializer.is_valid(raise_exception=True)
+
+        serializer.validated_data["user"] = request.user
+
+        is_default = serializer.validated_data.get("is_default", False)
+
+        if not PaymentMethod.objects.filter(user=request.user).exists():
+            serializer.validated_data["is_default"] = True
+        elif is_default:
+            PaymentMethod.objects.filter(user=request.user, is_default=True).update(
+                is_default=False
             )
+
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
         return Response(
-            {"message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
         )
 
     @swagger_auto_schema(
-        operation_id="retrieve_payment_method",
-        operation_summary="Get payment method details",
-        operation_description="Get details of a specific payment method.",
-        tags=["User Payment Methods"],
-        responses={200: PaymentMethodSerializer, 404: "Not Found"},
-    )
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(
-            {
-                "message": "Payment method details retrieved.",
-                "payment_method": serializer.data,
-            }
-        )
-
-    @swagger_auto_schema(
-        operation_id="delete_payment_method",
-        operation_summary="Delete payment method",
-        operation_description="Delete an existing payment method.",
-        tags=["User Payment Methods"],
-        responses={204: "No Content", 404: "Not Found", 400: "Bad Request"},
-    )
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        instance.delete()
-        return Response(
-            {"message": "Payment method deleted successfully."},
-            status=status.HTTP_204_NO_CONTENT,
-        )
-
-    @swagger_auto_schema(
-        operation_id="set_default_payment_method",
         operation_summary="Set default payment method",
-        operation_description="Set a payment method as default.",
-        tags=["User Payment Methods"],
-        responses={200: PaymentMethodSerializer, 404: "Not Found"},
+        operation_description="Set a payment method as default",
+        responses={200: PaymentMethodSerializer},
+        tags=["Payment Methods"],
     )
     @action(detail=True, methods=["post"])
     def set_default(self, request, pk=None):
         payment_method = self.get_object()
+
+        PaymentMethod.objects.filter(user=request.user, is_default=True).update(
+            is_default=False
+        )
+
         payment_method.is_default = True
         payment_method.save()
-        return Response(
-            {
-                "message": "Default payment method updated successfully.",
-                "payment_method": PaymentMethodSerializer(payment_method).data,
-            }
-        )
+
+        serializer = self.get_serializer(payment_method)
+        return Response(serializer.data)
 
 
-class ChangePasswordView(generics.GenericAPIView):
-    """
-    Endpoint for changing password
-    """
-
-    serializer_class = ChangePasswordSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    @swagger_auto_schema(
-        operation_id="change_password",
-        operation_summary="Change password",
-        operation_description="Change the password for the logged-in user.",
-        tags=["User Profile"],
-        responses={
-            200: "Password changed successfully",
-            400: "Bad Request",
-            401: "Unauthorized",
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+@swagger_auto_schema(
+    operation_summary="Log out",
+    operation_description="Blacklist the refresh token to log user out",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        properties={
+            "refresh": openapi.Schema(
+                type=openapi.TYPE_STRING,
+                description="Refresh token",
+            )
         },
-    )
-    def post(self, request):
-        serializer = self.get_serializer(data=request.data)
-
-        if serializer.is_valid():
-            user = request.user
-
-            if not user.check_password(
-                serializer.validated_data.get("current_password")
-            ):
-                return Response(
-                    {"message": "Current password is incorrect."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            user.set_password(serializer.validated_data.get("new_password"))
-            user.save()
-
-            update_session_auth_hash(request, user)
-
-            return Response(
-                {"message": "Password changed successfully."}, status=status.HTTP_200_OK
-            )
-
-        return Response(
-            {"message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-
-class LogoutView(generics.GenericAPIView):
-    """
-    Logout endpoint to blacklist the user's refresh token
-    """
-
-    permission_classes = [permissions.IsAuthenticated]
-
-    @swagger_auto_schema(
-        operation_id="logout_user",
-        operation_summary="Logout user",
-        operation_description="Blacklist the current user's refresh token.",
-        tags=["Authentication"],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=["refresh"],
-            properties={"refresh": openapi.Schema(type=openapi.TYPE_STRING)},
-        ),
-        responses={200: "Logout successful", 400: "Bad Request", 401: "Unauthorized"},
-    )
-    def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh")
-            if not refresh_token:
-                return Response(
-                    {"message": "Refresh token is required."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            token = RefreshToken(refresh_token)
-
-            if str(token["user_id"]) != str(request.user.id):
-                return Response(
-                    {"message": "Token does not match current user."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            token.blacklist()
-
-            return Response(
-                {"message": "Logout successful."}, status=status.HTTP_200_OK
-            )
-        except Exception as e:
-            return Response(
-                {"message": f"Logout failed: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
-@swagger_auto_schema(
-    operation_id="get_default_address",
-    operation_summary="Get default address",
-    operation_description="Get the user's default address",
-    tags=["User Address"],
-    responses={200: AddressSerializer, 404: "No default address found"},
+        required=["refresh"],
+    ),
+    responses={200: "Logged out successfully"},
+    tags=["Authentication"],
 )
-def get_default_address(request):
+def logout_view(request):
     try:
-        address = Address.objects.get(user=request.user, is_default=True)
+        refresh_token = request.data.get("refresh")
+        token = RefreshToken(refresh_token)
+        token.blacklist()
         return Response(
-            {
-                "message": "Default address retrieved successfully.",
-                "address": AddressSerializer(address).data,
-            }
+            {"message": "Logged out successfully"}, status=status.HTTP_200_OK
         )
-    except Address.DoesNotExist:
-        return Response(
-            {"message": "No default address found."}, status=status.HTTP_404_NOT_FOUND
-        )
-
-
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
-@swagger_auto_schema(
-    operation_id="get_default_payment_method",
-    operation_summary="Get default payment method",
-    operation_description="Get the user's default payment method",
-    tags=["User Payment Methods"],
-    responses={200: PaymentMethodSerializer, 404: "No default payment method found"},
-)
-def get_default_payment_method(request):
-    try:
-        payment_method = PaymentMethod.objects.get(user=request.user, is_default=True)
-        return Response(
-            {
-                "message": "Default payment method retrieved successfully.",
-                "payment_method": PaymentMethodSerializer(payment_method).data,
-            }
-        )
-    except PaymentMethod.DoesNotExist:
-        return Response(
-            {"message": "No default payment method found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    except Exception as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

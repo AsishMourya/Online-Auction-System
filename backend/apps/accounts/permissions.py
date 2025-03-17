@@ -10,7 +10,11 @@ class IsAdmin(BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == "admin"
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == "admin"
+        )
 
 
 class IsStaff(BasePermission):
@@ -19,8 +23,10 @@ class IsStaff(BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and (
-            request.user.role == "staff" or request.user.role == "admin"
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.role in ["admin", "staff"]
         )
 
 
@@ -30,72 +36,87 @@ class IsUser(BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == "user"
+        return request.user and request.user.is_authenticated
 
 
 class IsOwner(BasePermission):
     """
-    Permission check to ensure a user can only access their own data.
+    Permission to only allow owners of an object to access it.
+    Assumes the model instance has an `user` attribute or is the user itself.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Check if the object has a user attribute
+        if (
+            hasattr(obj, "id")
+            and hasattr(request.user, "id")
+            and obj.id == request.user.id
+        ):
+            return True
+
         if hasattr(obj, "user"):
             return obj.user == request.user
-        # If it's a user object, check the ID
-        return obj == request.user
+
+        if hasattr(obj, "owner"):
+            return obj.owner == request.user
+
+        if hasattr(obj, "seller"):
+            return obj.seller == request.user
+
+        if hasattr(obj, "bidder"):
+            return obj.bidder == request.user
+
+        if hasattr(obj, "recipient"):
+            return obj.recipient == request.user
+
+        return False
 
 
 def admin_required(view_func):
     """
-    Decorator to require admin role for a view function.
+    Decorator for views that checks if the user is admin.
     """
 
     @wraps(view_func)
-    def wrapper(self, request, *args, **kwargs):
+    def wrapped_view(request, *args, **kwargs):
         if request.user.is_authenticated and request.user.role == "admin":
-            return view_func(self, request, *args, **kwargs)
+            return view_func(request, *args, **kwargs)
         return Response(
-            {"message": "Admin privileges required to perform this action."},
+            {"detail": "You do not have permission to perform this action."},
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    return wrapper
+    return wrapped_view
 
 
 def staff_required(view_func):
     """
-    Decorator to require staff or admin role for a view function.
+    Decorator for views that checks if the user is staff or admin.
     """
 
     @wraps(view_func)
-    def wrapper(self, request, *args, **kwargs):
-        if request.user.is_authenticated and (
-            request.user.role == "staff" or request.user.role == "admin"
-        ):
-            return view_func(self, request, *args, **kwargs)
+    def wrapped_view(request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.role in ["admin", "staff"]:
+            return view_func(request, *args, **kwargs)
         return Response(
-            {"message": "Staff privileges required to perform this action."},
+            {"detail": "You do not have permission to perform this action."},
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    return wrapper
+    return wrapped_view
 
 
 def user_required(view_func):
     """
-    Decorator to require user role for a view function.
+    Decorator for views that checks if the user is authenticated.
     """
 
     @wraps(view_func)
-    def wrapper(self, request, *args, **kwargs):
-        if request.user.is_authenticated and (
-            request.user.role == "user" or request.user.role == "admin"
-        ):
-            return view_func(self, request, *args, **kwargs)
+    def wrapped_view(request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return view_func(request, *args, **kwargs)
         return Response(
-            {"message": "User privileges required to perform this action."},
+            {"detail": "Authentication required."},
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    return wrapper
+    return wrapped_view

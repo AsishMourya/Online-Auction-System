@@ -49,7 +49,9 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     # Local apps
     "apps.accounts.apps.AccountsConfig",
-    "apps.auctions",
+    "apps.auctions.apps.AuctionsConfig",
+    "apps.notifications.apps.NotificationsConfig",
+    "apps.transactions.apps.TransactionsConfig",
     "drf_yasg",
 ]
 
@@ -97,6 +99,10 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD"),
         "HOST": os.environ.get("DB_HOST"),
         "PORT": os.environ.get("DB_PORT"),
+        "OPTIONS": {
+            "client_encoding": "UTF8",
+            "connect_timeout": 10,
+        },
     }
 }
 
@@ -159,6 +165,18 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+
+SWAGGER_SETTINGS = {
+    "SECURITY_DEFINITIONS": {
+        "Bearer": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "Authorization",
+            "description": "Enter your bearer token in the format: Bearer <token>",
+        }
+    },
+    "DEFAULT_SECURITY": [{"Bearer": []}],
+}
 
 
 # Internationalization
