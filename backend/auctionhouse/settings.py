@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     # Local apps
     "apps.accounts.apps.AccountsConfig",
+    "apps.auctions",
     "drf_yasg",
 ]
 
