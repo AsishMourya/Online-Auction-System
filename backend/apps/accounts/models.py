@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 import re
+import uuid
 
 
 def validate_phone_number(value):
@@ -45,18 +46,15 @@ class CustomUserManager(BaseUserManager):
 class User(AbstractUser):
     ADMIN = "admin"
     STAFF = "staff"
-    BIDDER = "bidder"
-    BUYER = "buyer"
-    SELLER = "seller"
+    USER = "user"
 
     ROLE_CHOICES = [
         (ADMIN, "Admin"),
         (STAFF, "Staff"),
-        (BIDDER, "Bidder"),
-        (BUYER, "Buyer"),
-        (SELLER, "Seller"),
+        (USER, "User"),
     ]
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     username = None
     email = models.EmailField(_("email address"), unique=True)
     first_name = models.CharField(_("first name"), max_length=150)
@@ -69,7 +67,10 @@ class User(AbstractUser):
         validators=[validate_phone_number],
     )
     role = models.CharField(
-        _("role"), max_length=10, choices=ROLE_CHOICES, default=BUYER
+        _("role"),
+        max_length=10,
+        choices=ROLE_CHOICES,
+        default=USER,  # Default to USER now
     )
     is_active = models.BooleanField(_("active status"), default=True)
     signup_datetime = models.DateTimeField(_("signup date"), auto_now_add=True)
@@ -122,6 +123,7 @@ class User(AbstractUser):
 
 
 class Address(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="addresses")
     address_line1 = models.CharField(_("address line 1"), max_length=255)
     address_line2 = models.CharField(
@@ -179,6 +181,7 @@ class PaymentMethod(models.Model):
         (BANK, "Bank Transfer"),
     ]
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="payment_methods"
     )

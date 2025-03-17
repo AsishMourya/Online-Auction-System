@@ -98,7 +98,15 @@ class UserAdmin(BaseUserAdmin):
 class AddressAdmin(admin.ModelAdmin):
     """Admin interface for addresses"""
 
-    list_display = ("address_line1", "city", "state", "country", "user", "is_default")
+    list_display = (
+        "id",
+        "address_line1",
+        "city",
+        "state",
+        "country",
+        "user",
+        "is_default",
+    )
     list_filter = ("is_default", "country", "state", "city")
     search_fields = (
         "address_line1",
@@ -117,6 +125,7 @@ class PaymentMethodAdmin(admin.ModelAdmin):
     """Admin interface for payment methods"""
 
     list_display = (
+        "id",
         "payment_type",
         "provider",
         "account_identifier",

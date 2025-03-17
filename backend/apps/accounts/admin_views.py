@@ -11,6 +11,7 @@ from .serializers import (
     AddressSerializer,
     PaymentMethodSerializer,
     UserProfileSerializer,
+    UserProfileBasicSerializer,
 )
 
 
@@ -22,24 +23,50 @@ class AdminUserManagementViewSet(viewsets.ModelViewSet):
     serializer_class = UserProfileSerializer
     permission_classes = [IsAdmin]
     queryset = User.objects.all()
+    lookup_field = "pk"  # This allows looking up users by UUID
 
     @swagger_auto_schema(
+        operation_id="admin_list_users",
         operation_summary="List all users (Admin)",
         operation_description="Admin can view all users in the system.",
-        responses={200: UserProfileSerializer(many=True), 403: "Permission Denied"},
+        tags=["Admin - User Management"],
+        responses={
+            200: UserProfileBasicSerializer(many=True),
+            403: "Permission Denied",
+        },
     )
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
+        serializer = UserProfileBasicSerializer(queryset, many=True)
         return Response(
             {"message": "Users retrieved successfully.", "users": serializer.data}
         )
 
     @swagger_auto_schema(
-        operation_summary="Activate/Deactivate user (Admin)",
-        operation_description="Admin can activate or deactivate a user account.",
+        operation_id="admin_get_user_detail",
+        operation_summary="Get user details (Admin)",
+        operation_description="Admin can view detailed user information including addresses and payment methods.",
+        tags=["Admin - User Management"],
         responses={
             200: UserProfileSerializer,
+            403: "Permission Denied",
+            404: "User not found",
+        },
+    )
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(
+            {"message": "User details retrieved successfully.", "user": serializer.data}
+        )
+
+    @swagger_auto_schema(
+        operation_id="admin_toggle_user_status",
+        operation_summary="Activate/Deactivate user (Admin)",
+        operation_description="Admin can activate or deactivate a user account.",
+        tags=["Admin - User Management"],
+        responses={
+            200: UserProfileBasicSerializer,
             403: "Permission Denied",
             404: "Not Found",
         },
@@ -53,26 +80,28 @@ class AdminUserManagementViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "message": f"User {status_text} successfully.",
-                "user": UserProfileSerializer(user).data,
+                "user": UserProfileBasicSerializer(user).data,
             }
         )
 
     @swagger_auto_schema(
+        operation_id="admin_change_user_role",
         operation_summary="Change user role (Admin)",
         operation_description="Admin can change a user's role.",
+        tags=["Admin - User Management"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 "role": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="User role",
-                    enum=["admin", "staff", "bidder", "buyer", "seller"],
+                    enum=["admin", "staff", "user"],
                 )
             },
             required=["role"],
         ),
         responses={
-            200: UserProfileSerializer,
+            200: UserProfileBasicSerializer,
             400: "Bad Request",
             403: "Permission Denied",
         },
@@ -107,16 +136,18 @@ class AdminUserManagementViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "message": f"User role changed to {new_role} successfully.",
-                "user": UserProfileSerializer(user).data,
+                "user": UserProfileBasicSerializer(user).data,
             }
         )
 
     @swagger_auto_schema(
-        operation_summary="Create admin user (Admin only)",
-        operation_description="Admin can create other admin users.",
+        operation_id="admin_create_user",
+        operation_summary="Create user (Admin only)",
+        operation_description="Admin can create users with any role.",
+        tags=["Admin - User Management"],
         request_body=UserProfileSerializer,
         responses={
-            201: UserProfileSerializer,
+            201: UserProfileBasicSerializer,
             400: "Bad Request",
             403: "Permission Denied",
         },
@@ -140,6 +171,13 @@ class AdminUserManagementViewSet(viewsets.ModelViewSet):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 @admin_required
+@swagger_auto_schema(
+    operation_id="admin_dashboard",
+    operation_summary="Admin Dashboard",
+    operation_description="Admin dashboard with user statistics",
+    tags=["Admin - Dashboard"],
+    responses={200: "Dashboard data", 403: "Permission Denied"},
+)
 def admin_dashboard(request):
     """Admin dashboard view example"""
     user_count = User.objects.count()
@@ -167,8 +205,14 @@ def admin_dashboard(request):
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
+@swagger_auto_schema(
+    operation_id="admin_list_all_addresses",
+    operation_summary="List All Addresses (Admin)",
+    operation_description="Admin endpoint to get all addresses in the system",
+    tags=["Admin - Addresses"],
+    responses={200: AddressSerializer(many=True), 403: "Permission Denied"},
+)
 def all_addresses(request):
-    """Admin endpoint to get all addresses in the system"""
     addresses = Address.objects.all()
     serializer = AddressSerializer(addresses, many=True)
     return Response(
@@ -181,8 +225,18 @@ def all_addresses(request):
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
+@swagger_auto_schema(
+    operation_id="admin_list_user_addresses",
+    operation_summary="List User Addresses (Admin)",
+    operation_description="Admin endpoint to get addresses for a specific user",
+    tags=["Admin - Addresses"],
+    responses={
+        200: AddressSerializer(many=True),
+        403: "Permission Denied",
+        404: "User not found",
+    },
+)
 def user_addresses(request, user_id):
-    """Admin endpoint to get addresses for a specific user"""
     try:
         user = User.objects.get(id=user_id)
         addresses = Address.objects.filter(user=user)
@@ -201,8 +255,14 @@ def user_addresses(request, user_id):
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
+@swagger_auto_schema(
+    operation_id="admin_list_all_payment_methods",
+    operation_summary="List All Payment Methods (Admin)",
+    operation_description="Admin endpoint to get all payment methods in the system",
+    tags=["Admin - Payment Methods"],
+    responses={200: PaymentMethodSerializer(many=True), 403: "Permission Denied"},
+)
 def all_payment_methods(request):
-    """Admin endpoint to get all payment methods in the system"""
     payment_methods = PaymentMethod.objects.all()
     serializer = PaymentMethodSerializer(payment_methods, many=True)
     return Response(
@@ -215,8 +275,18 @@ def all_payment_methods(request):
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
+@swagger_auto_schema(
+    operation_id="admin_list_user_payment_methods",
+    operation_summary="List User Payment Methods (Admin)",
+    operation_description="Admin endpoint to get payment methods for a specific user",
+    tags=["Admin - Payment Methods"],
+    responses={
+        200: PaymentMethodSerializer(many=True),
+        403: "Permission Denied",
+        404: "User not found",
+    },
+)
 def user_payment_methods(request, user_id):
-    """Admin endpoint to get payment methods for a specific user"""
     try:
         user = User.objects.get(id=user_id)
         payment_methods = PaymentMethod.objects.filter(user=user)

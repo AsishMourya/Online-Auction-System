@@ -1,5 +1,4 @@
 from functools import wraps
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 from rest_framework import status
 from rest_framework.response import Response
@@ -25,31 +24,26 @@ class IsStaff(BasePermission):
         )
 
 
-class IsSeller(BasePermission):
+class IsUser(BasePermission):
     """
-    Permission check for seller users.
-    """
-
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == "seller"
-
-
-class IsBuyer(BasePermission):
-    """
-    Permission check for buyer users.
+    Permission check for regular users.
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == "buyer"
+        return request.user.is_authenticated and request.user.role == "user"
 
 
-class IsBidder(BasePermission):
+class IsOwner(BasePermission):
     """
-    Permission check for bidder users.
+    Permission check to ensure a user can only access their own data.
     """
 
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == "bidder"
+    def has_object_permission(self, request, view, obj):
+        # Check if the object has a user attribute
+        if hasattr(obj, "user"):
+            return obj.user == request.user
+        # If it's a user object, check the ID
+        return obj == request.user
 
 
 def admin_required(view_func):
@@ -88,57 +82,19 @@ def staff_required(view_func):
     return wrapper
 
 
-def seller_required(view_func):
+def user_required(view_func):
     """
-    Decorator to require seller role for a view function.
-    """
-
-    @wraps(view_func)
-    def wrapper(self, request, *args, **kwargs):
-        if request.user.is_authenticated and (
-            request.user.role == "seller" or request.user.role == "admin"
-        ):
-            return view_func(self, request, *args, **kwargs)
-        return Response(
-            {"message": "Seller privileges required to perform this action."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    return wrapper
-
-
-def buyer_required(view_func):
-    """
-    Decorator to require buyer role for a view function.
+    Decorator to require user role for a view function.
     """
 
     @wraps(view_func)
     def wrapper(self, request, *args, **kwargs):
         if request.user.is_authenticated and (
-            request.user.role == "buyer" or request.user.role == "admin"
+            request.user.role == "user" or request.user.role == "admin"
         ):
             return view_func(self, request, *args, **kwargs)
         return Response(
-            {"message": "Buyer privileges required to perform this action."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    return wrapper
-
-
-def bidder_required(view_func):
-    """
-    Decorator to require bidder role for a view function.
-    """
-
-    @wraps(view_func)
-    def wrapper(self, request, *args, **kwargs):
-        if request.user.is_authenticated and (
-            request.user.role == "bidder" or request.user.role == "admin"
-        ):
-            return view_func(self, request, *args, **kwargs)
-        return Response(
-            {"message": "Bidder privileges required to perform this action."},
+            {"message": "User privileges required to perform this action."},
             status=status.HTTP_403_FORBIDDEN,
         )
 

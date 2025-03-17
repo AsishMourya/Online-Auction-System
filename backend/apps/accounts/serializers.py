@@ -7,6 +7,84 @@ import re
 from .models import User, Address, PaymentMethod
 
 
+class AddressSerializer(serializers.ModelSerializer):
+    user_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = Address
+        fields = [
+            "id",
+            "user_id",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "is_default",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "user_id", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        user = self.context["request"].user
+        validated_data["user"] = user
+        return super().create(validated_data)
+
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    user_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = PaymentMethod
+        fields = [
+            "id",
+            "user_id",
+            "payment_type",
+            "provider",
+            "account_identifier",
+            "is_default",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "user_id",
+            "provider",
+            "account_identifier",
+            "created_at",
+        ]
+
+    def create(self, validated_data):
+        user = self.context["request"].user
+        validated_data["user"] = user
+
+        payment_type = validated_data.get("payment_type")
+        if (
+            payment_type == PaymentMethod.CREDIT_CARD
+            or payment_type == PaymentMethod.DEBIT_CARD
+        ):
+            card_providers = ["Visa", "MasterCard", "American Express", "Discover"]
+            validated_data["provider"] = random.choice(card_providers)
+            validated_data["account_identifier"] = (
+                f"**** **** **** {random.randint(1000, 9999)}"
+            )
+
+        elif payment_type == PaymentMethod.CRYPTO:
+            crypto_providers = ["Bitcoin", "Ethereum", "Litecoin", "Ripple"]
+            validated_data["provider"] = random.choice(crypto_providers)
+            validated_data["account_identifier"] = (
+                f"0x{get_random_string(40, '0123456789abcdef')}"
+            )
+
+        elif payment_type == PaymentMethod.BANK:
+            bank_providers = ["Chase", "Bank of America", "Wells Fargo", "Citibank"]
+            validated_data["provider"] = random.choice(bank_providers)
+            validated_data["account_identifier"] = f"****{random.randint(1000, 9999)}"
+
+        return super().create(validated_data)
+
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
     confirm_password = serializers.CharField(
@@ -48,7 +126,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return value
 
     def validate_role(self, value):
-        """Validate that public registrations can only be buyer or seller."""
+        """Validate that public registrations can only be USER role."""
         request = self.context.get("request")
 
         if (
@@ -56,9 +134,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             or not request.user.is_authenticated
             or request.user.role != User.ADMIN
         ):
-            if value not in [User.BUYER, User.SELLER]:
+            if value != User.USER:
                 raise serializers.ValidationError(
-                    "Public registration is only available for buyer or seller roles."
+                    "Public registration is only available for user role."
                 )
 
         return value
@@ -128,7 +206,27 @@ class UserLoginSerializer(serializers.Serializer):
         return data
 
 
+class UserProfileBasicSerializer(serializers.ModelSerializer):
+    """Serializer for basic user profile without related data"""
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone_number",
+            "role",
+            "is_active",
+        ]
+        read_only_fields = ["id", "email", "role"]
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
+    addresses = AddressSerializer(many=True, read_only=True)
+    payment_methods = PaymentMethodSerializer(many=True, read_only=True)
+
     class Meta:
         model = User
         fields = [
@@ -141,64 +239,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "is_active",
             "signup_datetime",
             "last_login_datetime",
+            "addresses",
+            "payment_methods",
         ]
-        read_only_fields = ["email", "signup_datetime", "last_login_datetime"]
-
-
-class AddressSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Address
-        fields = [
+        read_only_fields = [
             "id",
-            "address_line1",
-            "address_line2",
-            "city",
-            "state",
-            "postal_code",
-            "country",
-            "is_default",
+            "email",
+            "signup_datetime",
+            "last_login_datetime",
+            "role",
+            "addresses",
+            "payment_methods",
         ]
-
-    def create(self, validated_data):
-        user = self.context["request"].user
-        validated_data["user"] = user
-        return super().create(validated_data)
-
-
-class PaymentMethodSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PaymentMethod
-        fields = ["id", "payment_type", "provider", "account_identifier", "is_default"]
-        read_only_fields = ["provider", "account_identifier"]
-
-    def create(self, validated_data):
-        user = self.context["request"].user
-        validated_data["user"] = user
-
-        payment_type = validated_data.get("payment_type")
-        if (
-            payment_type == PaymentMethod.CREDIT_CARD
-            or payment_type == PaymentMethod.DEBIT_CARD
-        ):
-            card_providers = ["Visa", "MasterCard", "American Express", "Discover"]
-            validated_data["provider"] = random.choice(card_providers)
-            validated_data["account_identifier"] = (
-                f"**** **** **** {random.randint(1000, 9999)}"
-            )
-
-        elif payment_type == PaymentMethod.CRYPTO:
-            crypto_providers = ["Bitcoin", "Ethereum", "Litecoin", "Ripple"]
-            validated_data["provider"] = random.choice(crypto_providers)
-            validated_data["account_identifier"] = (
-                f"0x{get_random_string(40, '0123456789abcdef')}"
-            )
-
-        elif payment_type == PaymentMethod.BANK:
-            bank_providers = ["Chase", "Bank of America", "Wells Fargo", "Citibank"]
-            validated_data["provider"] = random.choice(bank_providers)
-            validated_data["account_identifier"] = f"****{random.randint(1000, 9999)}"
-
-        return super().create(validated_data)
 
 
 class ChangePasswordSerializer(serializers.Serializer):

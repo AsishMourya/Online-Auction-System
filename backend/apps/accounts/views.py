@@ -8,16 +8,15 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Address, PaymentMethod, User
-from .permissions import (
-    seller_required,
-)
+from .models import Address, PaymentMethod
+from .permissions import IsOwner
 from .serializers import (
     AddressSerializer,
     ChangePasswordSerializer,
     PaymentMethodSerializer,
     UserLoginSerializer,
     UserProfileSerializer,
+    UserProfileBasicSerializer,
     UserRegistrationSerializer,
 )
 
@@ -35,9 +34,11 @@ class UserRegistrationView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     @swagger_auto_schema(
+        operation_id="register_user",
         operation_summary="Register a new user",
         operation_description="Create a new user account with email, password, and profile information.",
-        responses={201: UserProfileSerializer, 400: "Bad Request"},
+        tags=["Authentication"],
+        responses={201: UserProfileBasicSerializer, 400: "Bad Request"},
     )
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(
@@ -48,13 +49,11 @@ class UserRegistrationView(generics.CreateAPIView):
                 user = serializer.save()
 
                 tokens = get_tokens_for_user(user)
-                profile_serializer = UserProfileSerializer(user)
-
-                role_msg = "buyer" if user.role == User.BUYER else "seller"
+                profile_serializer = UserProfileBasicSerializer(user)
 
                 return Response(
                     {
-                        "message": f"User registered successfully as a {role_msg}.",
+                        "message": "User registered successfully.",
                         "tokens": tokens,
                         "user": profile_serializer.data,
                     },
@@ -71,10 +70,12 @@ class UserLoginView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny]
 
     @swagger_auto_schema(
+        operation_id="login_user",
         operation_summary="Login user",
         operation_description="Authenticate user with email and password.",
+        tags=["Authentication"],
         responses={
-            200: openapi.Response("Login Successful", UserProfileSerializer),
+            200: openapi.Response("Login Successful", UserProfileBasicSerializer),
             400: "Bad Request",
         },
     )
@@ -88,7 +89,7 @@ class UserLoginView(generics.GenericAPIView):
                 {
                     "message": "Login successful.",
                     "tokens": tokens,
-                    "user": UserProfileSerializer(user).data,
+                    "user": UserProfileBasicSerializer(user).data,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -99,19 +100,23 @@ class UserLoginView(generics.GenericAPIView):
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
 
     @swagger_auto_schema(
+        operation_id="get_user_profile",
         operation_summary="Get user profile",
-        operation_description="Retrieve logged in user's profile information.",
+        operation_description="Retrieve logged in user's profile information including addresses and payment methods.",
+        tags=["User Profile"],
         responses={200: UserProfileSerializer},
     )
     def get_object(self):
         return self.request.user
 
     @swagger_auto_schema(
+        operation_id="update_user_profile",
         operation_summary="Update user profile",
         operation_description="Update logged in user's profile information.",
+        tags=["User Profile"],
         responses={200: UserProfileSerializer, 400: "Bad Request"},
     )
     def update(self, request, *args, **kwargs):
@@ -119,7 +124,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
 
-        if "role" in request.data and request.user.role != User.ADMIN:
+        if "role" in request.data:
             return Response(
                 {"message": "You don't have permission to change role."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -150,14 +155,18 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
 
 class AddressViewSet(viewsets.ModelViewSet):
     serializer_class = AddressSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Address.objects.none()
         return Address.objects.filter(user=self.request.user)
 
     @swagger_auto_schema(
+        operation_id="list_addresses",
         operation_summary="List user addresses",
         operation_description="Get all addresses for the logged in user.",
+        tags=["User Address"],
         responses={200: AddressSerializer(many=True)},
     )
     def list(self, request, *args, **kwargs):
@@ -171,8 +180,10 @@ class AddressViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="create_address",
         operation_summary="Add address",
         operation_description="Add a new address for the logged in user.",
+        tags=["User Address"],
         responses={201: AddressSerializer, 400: "Bad Request"},
     )
     def create(self, request, *args, **kwargs):
@@ -188,8 +199,10 @@ class AddressViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="retrieve_address",
         operation_summary="Get address details",
         operation_description="Get details of a specific address.",
+        tags=["User Address"],
         responses={200: AddressSerializer, 404: "Not Found"},
     )
     def retrieve(self, request, *args, **kwargs):
@@ -200,8 +213,10 @@ class AddressViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="update_address",
         operation_summary="Update address",
         operation_description="Update an existing address.",
+        tags=["User Address"],
         responses={200: AddressSerializer, 400: "Bad Request", 404: "Not Found"},
     )
     def update(self, request, *args, **kwargs):
@@ -217,8 +232,10 @@ class AddressViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="delete_address",
         operation_summary="Delete address",
         operation_description="Delete an existing address.",
+        tags=["User Address"],
         responses={204: "No Content", 404: "Not Found", 400: "Bad Request"},
     )
     def destroy(self, request, *args, **kwargs):
@@ -230,8 +247,10 @@ class AddressViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="set_default_address",
         operation_summary="Set default address",
         operation_description="Set an address as the default shipping address.",
+        tags=["User Address"],
         responses={200: AddressSerializer, 404: "Not Found"},
     )
     @action(detail=True, methods=["post"])
@@ -249,14 +268,18 @@ class AddressViewSet(viewsets.ModelViewSet):
 
 class PaymentMethodViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentMethodSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return PaymentMethod.objects.none()
         return PaymentMethod.objects.filter(user=self.request.user)
 
     @swagger_auto_schema(
+        operation_id="list_payment_methods",
         operation_summary="List payment methods",
         operation_description="Get all payment methods for the logged in user.",
+        tags=["User Payment Methods"],
         responses={200: PaymentMethodSerializer(many=True)},
     )
     def list(self, request, *args, **kwargs):
@@ -270,8 +293,10 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="create_payment_method",
         operation_summary="Add payment method",
         operation_description="Add a new payment method for the logged in user.",
+        tags=["User Payment Methods"],
         responses={201: PaymentMethodSerializer, 400: "Bad Request"},
     )
     def create(self, request, *args, **kwargs):
@@ -290,8 +315,10 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="retrieve_payment_method",
         operation_summary="Get payment method details",
         operation_description="Get details of a specific payment method.",
+        tags=["User Payment Methods"],
         responses={200: PaymentMethodSerializer, 404: "Not Found"},
     )
     def retrieve(self, request, *args, **kwargs):
@@ -305,8 +332,10 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="delete_payment_method",
         operation_summary="Delete payment method",
         operation_description="Delete an existing payment method.",
+        tags=["User Payment Methods"],
         responses={204: "No Content", 404: "Not Found", 400: "Bad Request"},
     )
     def destroy(self, request, *args, **kwargs):
@@ -318,8 +347,10 @@ class PaymentMethodViewSet(viewsets.ModelViewSet):
         )
 
     @swagger_auto_schema(
+        operation_id="set_default_payment_method",
         operation_summary="Set default payment method",
         operation_description="Set a payment method as default.",
+        tags=["User Payment Methods"],
         responses={200: PaymentMethodSerializer, 404: "Not Found"},
     )
     @action(detail=True, methods=["post"])
@@ -344,8 +375,10 @@ class ChangePasswordView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
+        operation_id="change_password",
         operation_summary="Change password",
         operation_description="Change the password for the logged-in user.",
+        tags=["User Profile"],
         responses={
             200: "Password changed successfully",
             400: "Bad Request",
@@ -388,8 +421,10 @@ class LogoutView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
+        operation_id="logout_user",
         operation_summary="Logout user",
         operation_description="Blacklist the current user's refresh token.",
+        tags=["Authentication"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=["refresh"],
@@ -428,10 +463,14 @@ class LogoutView(generics.GenericAPIView):
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
+@swagger_auto_schema(
+    operation_id="get_default_address",
+    operation_summary="Get default address",
+    operation_description="Get the user's default address",
+    tags=["User Address"],
+    responses={200: AddressSerializer, 404: "No default address found"},
+)
 def get_default_address(request):
-    """
-    Get the user's default address
-    """
     try:
         address = Address.objects.get(user=request.user, is_default=True)
         return Response(
@@ -448,10 +487,14 @@ def get_default_address(request):
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
+@swagger_auto_schema(
+    operation_id="get_default_payment_method",
+    operation_summary="Get default payment method",
+    operation_description="Get the user's default payment method",
+    tags=["User Payment Methods"],
+    responses={200: PaymentMethodSerializer, 404: "No default payment method found"},
+)
 def get_default_payment_method(request):
-    """
-    Get the user's default payment method
-    """
     try:
         payment_method = PaymentMethod.objects.get(user=request.user, is_default=True)
         return Response(
