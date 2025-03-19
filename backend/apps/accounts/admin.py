@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from .models import User, Address, PaymentMethod
+from .models import User, Address, PaymentMethod, Wallet
 
 
 class AddressInline(admin.TabularInline):
@@ -30,6 +30,19 @@ class PaymentMethodInline(admin.TabularInline):
     readonly_fields = ("provider", "account_identifier")
 
 
+class WalletInline(admin.TabularInline):
+    """Inline view for user wallet"""
+
+    model = Wallet
+    extra = 0
+    fields = ("balance", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     """Custom user admin"""
@@ -41,28 +54,17 @@ class UserAdmin(BaseUserAdmin):
         "role",
         "is_active",
         "signup_datetime",
-        "last_login_datetime",
     )
-    list_filter = ("role", "is_active", "is_staff", "is_superuser")
-    search_fields = ("email", "first_name", "last_name", "phone_number")
+    list_filter = ("role", "is_active", "signup_datetime")
+    search_fields = ("email", "first_name", "last_name")
     ordering = ("-signup_datetime",)
-    readonly_fields = ("signup_datetime", "last_login_datetime")
 
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         (_("Personal info"), {"fields": ("first_name", "last_name", "phone_number")}),
         (
             _("Permissions"),
-            {
-                "fields": (
-                    "role",
-                    "is_active",
-                    "is_staff",
-                    "is_superuser",
-                    "groups",
-                    "user_permissions",
-                ),
-            },
+            {"fields": ("role", "is_active", "is_staff", "is_superuser")},
         ),
         (_("Important dates"), {"fields": ("signup_datetime", "last_login_datetime")}),
     )
@@ -74,65 +76,51 @@ class UserAdmin(BaseUserAdmin):
                 "classes": ("wide",),
                 "fields": (
                     "email",
-                    "password1",
-                    "password2",
                     "first_name",
                     "last_name",
+                    "password1",
+                    "password2",
                     "role",
-                    "is_active",
                 ),
             },
         ),
     )
 
-    inlines = [AddressInline, PaymentMethodInline]
-
-    def save_model(self, request, obj, form, change):
-        """Override save method to handle password hashing"""
-        if not change:
-            obj.set_password(form.cleaned_data["password"])
-        super().save_model(request, obj, form, change)
+    inlines = [WalletInline, AddressInline, PaymentMethodInline]
+    readonly_fields = ("signup_datetime", "last_login_datetime")
 
 
 @admin.register(Address)
 class AddressAdmin(admin.ModelAdmin):
-    """Admin interface for addresses"""
-
-    list_display = (
-        "id",
-        "address_line1",
-        "city",
-        "state",
-        "country",
-        "user",
-        "is_default",
-    )
-    list_filter = ("is_default", "country", "state", "city")
-    search_fields = (
-        "address_line1",
-        "address_line2",
-        "city",
-        "state",
-        "postal_code",
-        "country",
-        "user__email",
-    )
+    list_display = ("user", "address_line1", "city", "country", "is_default")
+    list_filter = ("is_default", "country", "city")
+    search_fields = ("user__email", "address_line1", "city", "country")
     raw_id_fields = ("user",)
 
 
 @admin.register(PaymentMethod)
 class PaymentMethodAdmin(admin.ModelAdmin):
-    """Admin interface for payment methods"""
-
-    list_display = (
-        "id",
-        "payment_type",
-        "provider",
-        "account_identifier",
-        "user",
-        "is_default",
-    )
-    list_filter = ("payment_type", "is_default", "provider")
-    search_fields = ("provider", "account_identifier", "user__email")
+    list_display = ("user", "payment_type", "provider", "is_default")
+    list_filter = ("payment_type", "is_default")
+    search_fields = ("user__email", "provider")
     raw_id_fields = ("user",)
-    readonly_fields = ("provider", "account_identifier")
+
+
+@admin.register(Wallet)
+class WalletAdmin(admin.ModelAdmin):
+    list_display = ("user", "balance", "created_at", "updated_at")
+    list_filter = ("created_at",)
+    search_fields = ("user__email",)
+    readonly_fields = ("created_at", "updated_at")
+
+    actions = ["add_funds"]
+
+    def add_funds(self, request, queryset):
+        """Admin action to add funds to selected wallets"""
+        for wallet in queryset:
+            wallet.balance += 1000
+            wallet.save()
+
+        self.message_user(request, f"Added 1000 to {queryset.count()} wallet(s)")
+
+    add_funds.short_description = "Add 1000 to selected wallets"

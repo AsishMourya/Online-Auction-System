@@ -99,6 +99,15 @@ class BidSerializer(serializers.ModelSerializer):
                 f"Bid must be higher than the current highest bid of {min_bid}."
             )
 
+        from apps.accounts.models import Wallet
+
+        try:
+            wallet = Wallet.objects.get(user=user)
+            if wallet.balance < amount:
+                raise serializers.ValidationError("Insufficient funds in your wallet.")
+        except Wallet.DoesNotExist:
+            raise serializers.ValidationError("You need to set up a wallet first.")
+
         return data
 
     def create(self, validated_data):
@@ -118,7 +127,7 @@ class AuctionSerializer(serializers.ModelSerializer):
     time_remaining = serializers.DurationField(read_only=True)
     highest_bidder = UserProfileBasicSerializer(read_only=True)
     is_watched = serializers.SerializerMethodField()
-    item_data = ItemSerializer(write_only=True, required=False)
+    item_data = ItemSerializer(required=True, write_only=True)
 
     class Meta:
         model = Auction
@@ -126,7 +135,6 @@ class AuctionSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
-            "item",
             "item_data",
             "item_details",
             "seller_id",
@@ -165,22 +173,6 @@ class AuctionSerializer(serializers.ModelSerializer):
         return False
 
     def validate(self, data):
-        if self.instance is None:
-            item = data.get("item")
-            item_data = data.get("item_data")
-
-            if not item and not item_data:
-                raise serializers.ValidationError(
-                    {
-                        "item": "Either an existing item ID or item data must be provided."
-                    }
-                )
-
-            if item and item.owner != self.context["request"].user:
-                raise serializers.ValidationError(
-                    {"item": "You can only create auctions for items you own."}
-                )
-
         start_time = data.get("start_time", getattr(self.instance, "start_time", None))
         end_time = data.get("end_time", getattr(self.instance, "end_time", None))
 
@@ -240,22 +232,27 @@ class AuctionSerializer(serializers.ModelSerializer):
         user = self.context["request"].user
         validated_data["seller"] = user
 
-        item_data = validated_data.pop("item_data", None)
+        item_data = validated_data.pop("item_data")
+        item_data["owner"] = user
 
-        if item_data and not validated_data.get("item"):
-            item_data["owner"] = user
+        category_name = item_data.pop("category_name", None)
 
-            category_name = item_data.pop("category_name", None)
+        if "category" not in item_data and category_name:
+            category, _ = Category.objects.get_or_create(
+                name=category_name,
+                defaults={"description": f"Category for {category_name}"},
+            )
+            item_data["category"] = category
 
-            if "category" not in item_data and category_name:
-                category, _ = Category.objects.get_or_create(
-                    name=category_name,
-                    defaults={"description": f"Category for {category_name}"},
-                )
-                item_data["category"] = category
+        if "category" not in item_data:
+            category, _ = Category.objects.get_or_create(
+                name="Uncategorized",
+                defaults={"description": "Items without a specific category"},
+            )
+            item_data["category"] = category
 
-            item = Item.objects.create(**item_data)
-            validated_data["item"] = item
+        item = Item.objects.create(**item_data)
+        validated_data["item"] = item
 
         with transaction.atomic():
             now = timezone.now()

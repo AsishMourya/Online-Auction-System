@@ -6,5 +6,4 @@ class TransactionsConfig(AppConfig):
     name = "apps.transactions"
 
     def ready(self):
-        """Import signals when app is ready"""
-        import apps.transactions.signals
+        import apps.transactions.signals  # Register signals

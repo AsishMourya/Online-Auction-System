@@ -3,6 +3,8 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from django.contrib.postgres.fields import ArrayField
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 import uuid
 
 from apps.accounts.models import User
@@ -78,7 +80,7 @@ class Auction(models.Model):
 
     STATUS_CHOICES = [
         (STATUS_DRAFT, "Draft"),
-        (STATUS_PENDING, "Pending Approval"),
+        (STATUS_PENDING, "Pending Start"),
         (STATUS_ACTIVE, "Active"),
         (STATUS_ENDED, "Ended"),
         (STATUS_CANCELLED, "Cancelled"),
@@ -170,11 +172,20 @@ class Auction(models.Model):
         self.clean()
 
         now = timezone.now()
-        if self.status == self.STATUS_ACTIVE:
-            if now > self.end_time:
-                self.status = self.STATUS_ENDED
-            elif now < self.start_time:
+
+        if self.pk is None or self.status == self.STATUS_DRAFT:
+            if now >= self.start_time:
+                if now > self.end_time:
+                    self.status = self.STATUS_ENDED
+                else:
+                    self.status = self.STATUS_ACTIVE
+            else:
                 self.status = self.STATUS_PENDING
+
+        elif self.status == self.STATUS_PENDING and now >= self.start_time:
+            self.status = self.STATUS_ACTIVE
+        elif self.status == self.STATUS_ACTIVE and now >= self.end_time:
+            self.status = self.STATUS_ENDED
 
         super().save(*args, **kwargs)
 
@@ -267,6 +278,12 @@ class Bid(models.Model):
         if not self.auction.is_active():
             errors["auction"] = _("Cannot bid on an inactive auction")
 
+        from apps.accounts.models import Wallet
+
+        wallet = Wallet.objects.get(user=self.bidder)
+        if wallet.balance < self.amount:
+            errors["amount"] = _("Insufficient funds in your wallet")
+
         highest_bid = (
             self.auction.bids.filter(status=Bid.STATUS_ACTIVE)
             .order_by("-amount")
@@ -290,17 +307,28 @@ class Bid(models.Model):
     def save(self, *args, **kwargs):
         self.clean()
 
-        if not self.pk:
-            Bid.objects.filter(auction=self.auction, status=self.STATUS_ACTIVE).update(
-                status=self.STATUS_OUTBID
+        is_new = self.pk is None
+
+        if is_new:
+            result = super().save(*args, **kwargs)
+
+            from apps.notifications.services import create_notification
+            from apps.notifications.models import Notification
+
+            create_notification(
+                recipient=self.auction.seller,
+                notification_type=Notification.TYPE_BID,
+                title=f"New bid on your auction: {self.auction.title}",
+                message=f"A bid of {self.amount} was placed by {self.bidder.email}",
+                priority=Notification.PRIORITY_MEDIUM,
+                related_object_id=self.auction.id,
+                related_object_type="auction",
             )
 
-            if self.auction.buy_now_price and self.amount >= self.auction.buy_now_price:
-                self.status = self.STATUS_WON
-                self.auction.status = Auction.STATUS_SOLD
-                self.auction.save()
+        else:
+            result = super().save(*args, **kwargs)
 
-        super().save(*args, **kwargs)
+        return result
 
     class Meta:
         ordering = ["-timestamp"]
@@ -323,3 +351,21 @@ class AuctionWatch(models.Model):
 
     def __str__(self):
         return f"{self.user.email} is watching {self.auction.title}"
+
+
+@receiver(post_save, sender=Auction)
+def notify_on_auction_creation(sender, instance, created, **kwargs):
+    """Send notification when a new auction is created"""
+    if created:
+        from apps.notifications.services import create_notification
+        from apps.notifications.models import Notification
+
+        create_notification(
+            recipient=instance.seller,
+            notification_type=Notification.TYPE_NEW_AUCTION,
+            title="Your auction has been created",
+            message=f"Your auction '{instance.title}' has been created and will start at {instance.start_time}.",
+            priority=Notification.PRIORITY_MEDIUM,
+            related_object_id=instance.id,
+            related_object_type="auction",
+        )

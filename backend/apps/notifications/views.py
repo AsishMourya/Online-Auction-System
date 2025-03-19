@@ -5,13 +5,14 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsOwner
-from apps.core.mixins import SwaggerSchemaMixin
+from apps.core.mixins import SwaggerSchemaMixin, ApiResponseMixin
+from apps.core.responses import api_response
 
 from .models import Notification, NotificationPreference
 from .serializers import NotificationPreferenceSerializer, NotificationSerializer
 
 
-class NotificationViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
+class NotificationViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet):
     """API endpoints for managing user notifications"""
 
     serializer_class = NotificationSerializer
@@ -76,7 +77,9 @@ class NotificationViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Notifications retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="retrieve_notification",
@@ -89,7 +92,9 @@ class NotificationViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Notification details retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="mark_read",
@@ -106,7 +111,7 @@ class NotificationViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         notification.is_read = True
         notification.save()
         serializer = self.get_serializer(notification)
-        return Response(serializer.data)
+        return api_response(data=serializer.data, message="Notification marked as read")
 
     @swagger_auto_schema(
         operation_id="mark_all_read",
@@ -121,9 +126,7 @@ class NotificationViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         """Mark all notifications as read"""
         queryset = self.get_queryset()
         queryset.update(is_read=True)
-        return Response(
-            {"message": "All notifications marked as read"}, status=status.HTTP_200_OK
-        )
+        return api_response(message="All notifications marked as read")
 
     @swagger_auto_schema(
         operation_id="delete_notification",
@@ -137,7 +140,9 @@ class NotificationViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         """Delete a notification"""
         notification = self.get_object()
         notification.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return api_response(
+            message="Notification deleted successfully", status=status.HTTP_200_OK
+        )
 
     @swagger_auto_schema(
         operation_id="delete_all_read",
@@ -152,10 +157,12 @@ class NotificationViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         """Delete all read notifications"""
         queryset = self.get_queryset().filter(is_read=True)
         queryset.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return api_response(message="All read notifications deleted successfully")
 
 
-class NotificationPreferenceViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
+class NotificationPreferenceViewSet(
+    ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet
+):
     """API endpoints for managing notification preferences"""
 
     serializer_class = NotificationPreferenceSerializer
@@ -191,7 +198,10 @@ class NotificationPreferenceViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         )
 
         serializer = self.get_serializer(preference)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data,
+            message="Notification preferences retrieved successfully",
+        )
 
     @swagger_auto_schema(
         operation_id="update_notification_preferences",
@@ -212,7 +222,10 @@ class NotificationPreferenceViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data,
+            message="Notification preferences updated successfully",
+        )
 
     @swagger_auto_schema(
         operation_id="update_notification_channels",
@@ -242,19 +255,25 @@ class NotificationPreferenceViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         channels = request.data.get("channels")
 
         if not channels or not isinstance(channels, list):
-            return Response(
-                {"detail": "A list of notification channels is required."},
+            return api_response(
+                success=False,
+                message="A list of notification channels is required",
                 status=status.HTTP_400_BAD_REQUEST,
+                errors={"channels": ["A list of notification channels is required"]},
             )
 
         valid_channels = [c[0] for c in NotificationPreference.CHANNEL_CHOICES]
         for channel in channels:
             if channel not in valid_channels:
-                return Response(
-                    {
-                        "detail": f"Invalid channel '{channel}'. Valid options are: {', '.join(valid_channels)}."
-                    },
+                return api_response(
+                    success=False,
+                    message=f"Invalid channel '{channel}'",
                     status=status.HTTP_400_BAD_REQUEST,
+                    errors={
+                        "channels": [
+                            f"Invalid channel '{channel}'. Valid options are: {', '.join(valid_channels)}."
+                        ]
+                    },
                 )
 
         user = request.user
@@ -263,4 +282,6 @@ class NotificationPreferenceViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         preference.save()
 
         serializer = self.get_serializer(preference)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Notification channels updated successfully"
+        )

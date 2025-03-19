@@ -5,10 +5,12 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     AddressViewSet,
     CustomTokenObtainPairView,
+    CustomTokenRefreshView,
     PaymentMethodViewSet,
     UserProfileViewSet,
     UserRegistrationView,
     logout_view,
+    WalletViewSet,
 )
 from .admin_views import (
     AdminUserManagementViewSet,
@@ -24,6 +26,7 @@ router = DefaultRouter()
 router.register(r"profile", UserProfileViewSet, basename="profile")
 router.register(r"addresses", AddressViewSet, basename="address")
 router.register(r"payment-methods", PaymentMethodViewSet, basename="payment-method")
+router.register(r"wallet", WalletViewSet, basename="wallet")
 
 # Setup router for admin API endpoints
 admin_router = DefaultRouter()
@@ -31,8 +34,8 @@ admin_router.register(r"users", AdminUserManagementViewSet, basename="admin-user
 
 urlpatterns = [
     # Auth endpoints
-    path("token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("login/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path("register/", UserRegistrationView.as_view(), name="register"),
     path("logout/", logout_view, name="logout"),
     path("", include(router.urls)),

@@ -551,15 +551,15 @@ class Migration(migrations.Migration):
                 -- Check if this bid meets the buy now price
                 IF TG_OP = 'INSERT' THEN
                     DECLARE
-                        buy_now_price DECIMAL(12,2);
+                        auction_buy_now_price DECIMAL(12,2);
                     BEGIN
                         -- Get buy now price for the auction
-                        SELECT buy_now_price INTO buy_now_price 
+                        SELECT auctions_auction.buy_now_price INTO auction_buy_now_price 
                         FROM auctions_auction 
                         WHERE id = NEW.auction_id;
                         
                         -- If buy now price exists and bid meets/exceeds it
-                        IF buy_now_price IS NOT NULL AND NEW.amount >= buy_now_price THEN
+                        IF auction_buy_now_price IS NOT NULL AND NEW.amount >= auction_buy_now_price THEN
                             -- Mark this bid as won
                             NEW.status := 'won';
                             
@@ -607,5 +607,278 @@ class Migration(migrations.Migration):
             DROP TRIGGER IF EXISTS buy_now_trigger ON auctions_bid;
             DROP FUNCTION IF EXISTS process_buy_now();
             """,
-        )
+        ),
+        migrations.RunSQL(
+            """
+            CREATE OR REPLACE FUNCTION update_auction_status() RETURNS TRIGGER AS $$
+            DECLARE
+                now_time TIMESTAMP;
+                highest_bid_record RECORD;
+                notification_id UUID;
+                lost_bid RECORD;  -- Add declaration for lost_bid variable
+                bid RECORD;       -- Add declaration for bid variable
+            BEGIN
+                now_time := NOW();
+                
+                -- Check if auction should be activated
+                IF OLD.status = 'pending' AND now_time >= OLD.start_time THEN
+                    NEW.status := 'active';
+                    
+                    -- Notify seller that auction has started
+                    notification_id := uuid_generate_v4();
+                    INSERT INTO notifications_notification (
+                        id, recipient_id, notification_type, title, message,
+                        related_object_id, related_object_type, is_read, priority, created_at
+                    ) VALUES (
+                        notification_id,
+                        NEW.seller_id,
+                        'auction_started',
+                        'Your auction has started: ' || NEW.title,
+                        'Your auction for ''' || NEW.title || ''' is now active and accepting bids.',
+                        NEW.id,
+                        'auction',
+                        false,
+                        'medium',
+                        NOW()
+                    );
+                END IF;
+                
+                -- Check if auction should be ended
+                IF OLD.status = 'active' AND now_time >= OLD.end_time THEN
+                    NEW.status := 'ended';
+                    
+                    -- Find highest bid
+                    SELECT * INTO highest_bid_record 
+                    FROM auctions_bid 
+                    WHERE auction_id = NEW.id 
+                    AND status = 'active' 
+                    ORDER BY amount DESC LIMIT 1;
+                    
+                    -- If there is a highest bid and it meets reserve price
+                    IF FOUND AND (NEW.reserve_price IS NULL OR highest_bid_record.amount >= NEW.reserve_price) THEN
+                        -- Update highest bid to won status
+                        UPDATE auctions_bid SET status = 'won' 
+                        WHERE id = highest_bid_record.id;
+                        
+                        -- Update all other bids to lost status
+                        UPDATE auctions_bid SET status = 'lost' 
+                        WHERE auction_id = NEW.id AND id != highest_bid_record.id;
+                        
+                        -- Release funds for all lost bids
+                        FOR lost_bid IN 
+                            SELECT * FROM auctions_bid 
+                            WHERE auction_id = NEW.id 
+                            AND status = 'lost' 
+                            AND bidder_id != highest_bid_record.bidder_id
+                        LOOP
+                            -- Release funds for lost bidders
+                            UPDATE accounts_wallet
+                            SET balance = balance + lost_bid.amount,
+                                held_balance = GREATEST(0, held_balance - lost_bid.amount)
+                            WHERE user_id = lost_bid.bidder_id;
+                            
+                            -- Create a transaction record for the release
+                            INSERT INTO transactions_transaction (
+                                id, user_id, transaction_type, amount, status,
+                                reference, reference_id, created_at, updated_at, completed_at
+                            ) VALUES (
+                                uuid_generate_v4(),
+                                lost_bid.bidder_id,
+                                'bid_release',
+                                lost_bid.amount,
+                                'completed',
+                                'Release funds for lost bid on ' || NEW.title,
+                                lost_bid.id,
+                                NOW(),
+                                NOW(),
+                                NOW()
+                            );
+                        END LOOP;
+                        
+                        -- Update auction to sold status
+                        NEW.status := 'sold';
+                    ELSE
+                        -- Release all bids if no winner
+                        FOR bid IN 
+                            SELECT * FROM auctions_bid 
+                            WHERE auction_id = NEW.id
+                        LOOP
+                            -- Release funds back to all bidders
+                            UPDATE accounts_wallet
+                            SET balance = balance + bid.amount,
+                                held_balance = GREATEST(0, held_balance - bid.amount)
+                            WHERE user_id = bid.bidder_id;
+                            
+                            -- Create a transaction record for each release
+                            INSERT INTO transactions_transaction (
+                                id, user_id, transaction_type, amount, status,
+                                reference, reference_id, created_at, updated_at, completed_at
+                            ) VALUES (
+                                uuid_generate_v4(),
+                                bid.bidder_id,
+                                'bid_release',
+                                bid.amount,
+                                'completed',
+                                'Release funds for auction ended without sale: ' || NEW.title,
+                                bid.id,
+                                NOW(),
+                                NOW(),
+                                NOW()
+                            );
+                            
+                            -- Mark bid as lost
+                            UPDATE auctions_bid SET status = 'lost' 
+                            WHERE id = bid.id;
+                        END LOOP;
+                    END IF;
+                END IF;
+                
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            
+            DROP TRIGGER IF EXISTS auction_status_update_trigger ON auctions_auction;
+            CREATE TRIGGER auction_status_update_trigger
+            BEFORE UPDATE ON auctions_auction
+            FOR EACH ROW
+            EXECUTE FUNCTION update_auction_status();
+            """,
+            """
+            DROP TRIGGER IF EXISTS auction_status_update_trigger ON auctions_auction;
+            DROP FUNCTION IF EXISTS update_auction_status();
+            """,
+        ),
+        migrations.RunSQL(
+            """
+            CREATE OR REPLACE FUNCTION process_autobid() RETURNS TRIGGER AS $$
+            DECLARE
+                autobid_record RECORD;
+                current_highest_bid DECIMAL(12,2);
+                new_bid_amount DECIMAL(12,2);
+                wallet_balance DECIMAL(12,2);
+            BEGIN
+                -- Only process if a new bid is placed and outbids someone
+                IF NEW.status = 'active' THEN
+                    -- Find all active autobids for this auction excluding the bidder who just bid
+                    FOR autobid_record IN 
+                        SELECT ab.*, w.balance as wallet_balance
+                        FROM transactions_autobid ab
+                        JOIN accounts_wallet w ON w.user_id = ab.user_id
+                        WHERE ab.auction_id = NEW.auction_id
+                          AND ab.is_active = TRUE
+                          AND ab.user_id != NEW.bidder_id
+                        ORDER BY ab.max_amount DESC
+                    LOOP
+                        -- Get current highest bid amount
+                        SELECT COALESCE(MAX(amount), 0) INTO current_highest_bid
+                        FROM auctions_bid
+                        WHERE auction_id = NEW.auction_id AND status = 'active';
+                        
+                        -- Calculate new bid amount (current highest + increment)
+                        new_bid_amount := current_highest_bid + autobid_record.bid_increment;
+                        
+                        -- Check if this autobid can outbid the current highest bid
+                        IF new_bid_amount <= autobid_record.max_amount AND new_bid_amount <= autobid_record.wallet_balance THEN
+                            -- Create a new bid for the autobidder
+                            INSERT INTO auctions_bid (
+                                id, auction_id, bidder_id, amount, timestamp, status
+                            ) VALUES (
+                                uuid_generate_v4(), NEW.auction_id, autobid_record.user_id, 
+                                new_bid_amount, NOW(), 'active'
+                            );
+                            
+                            -- Update the current bid to outbid
+                            UPDATE auctions_bid SET status = 'outbid' WHERE id = NEW.id;
+                            
+                            -- Update wallet balance for the autobidder
+                            UPDATE accounts_wallet 
+                            SET balance = balance - new_bid_amount
+                            WHERE user_id = autobid_record.user_id;
+                            
+                            -- Return here as we've processed one autobid
+                            -- The trigger will fire again for the new bid
+                            RETURN NEW;
+                        END IF;
+                    END LOOP;
+                END IF;
+                
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            
+            DROP TRIGGER IF EXISTS autobid_trigger ON auctions_bid;
+            CREATE TRIGGER autobid_trigger
+            AFTER INSERT OR UPDATE ON auctions_bid
+            FOR EACH ROW
+            EXECUTE FUNCTION process_autobid();
+            """,
+            """
+            DROP TRIGGER IF EXISTS autobid_trigger ON auctions_bid;
+            DROP FUNCTION IF EXISTS process_autobid();
+            """,
+        ),
+        migrations.RunSQL(
+            """
+            -- Function to extend auction time when bid is placed near end
+            CREATE OR REPLACE FUNCTION extend_auction_time() RETURNS TRIGGER AS $$
+            DECLARE
+                time_remaining INTERVAL;
+                auction_record RECORD;
+            BEGIN
+                -- Find the auction this bid belongs to
+                SELECT * INTO auction_record FROM auctions_auction WHERE id = NEW.auction_id;
+                
+                -- Calculate time remaining
+                time_remaining := auction_record.end_time - NOW();
+                
+                -- If less than 5 minutes remaining, extend by 5 minutes
+                IF time_remaining < INTERVAL '5 minutes' AND auction_record.status = 'active' THEN
+                    UPDATE auctions_auction
+                    SET end_time = end_time + INTERVAL '5 minutes'
+                    WHERE id = NEW.auction_id;
+                END IF;
+                
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            
+            DROP TRIGGER IF EXISTS auction_extend_time_trigger ON auctions_bid;
+            CREATE TRIGGER auction_extend_time_trigger
+            AFTER INSERT ON auctions_bid
+            FOR EACH ROW
+            EXECUTE FUNCTION extend_auction_time();
+            """,
+            """
+            DROP TRIGGER IF EXISTS auction_extend_time_trigger ON auctions_bid;
+            DROP FUNCTION IF EXISTS extend_auction_time();
+            """,
+        ),
+        migrations.RunSQL(
+            """
+            -- Function to handle bid release when outbid
+            CREATE OR REPLACE FUNCTION handle_outbid_wallet_refund() RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.status = 'outbid' AND OLD.status = 'active' THEN
+                    -- Refund the outbid user's wallet
+                    UPDATE accounts_wallet
+                    SET balance = balance + OLD.amount
+                    WHERE user_id = OLD.bidder_id;
+                END IF;
+                
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+            
+            DROP TRIGGER IF EXISTS outbid_refund_trigger ON auctions_bid;
+            CREATE TRIGGER outbid_refund_trigger
+            AFTER UPDATE ON auctions_bid
+            FOR EACH ROW
+            WHEN (NEW.status = 'outbid' AND OLD.status = 'active')
+            EXECUTE FUNCTION handle_outbid_wallet_refund();
+            """,
+            """
+            DROP TRIGGER IF EXISTS outbid_refund_trigger ON auctions_bid;
+            DROP FUNCTION IF EXISTS handle_outbid_wallet_refund();
+            """,
+        ),
     ]

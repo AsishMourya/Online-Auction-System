@@ -11,8 +11,12 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 from apps.accounts.permissions import IsAdmin
-from apps.transactions.models import AutoBid, Wallet
+from apps.transactions.models import AutoBid
+from apps.accounts.models import Wallet
 from apps.transactions.serializers import AutoBidSerializer
+from apps.core.mixins import SwaggerSchemaMixin, ApiResponseMixin
+from apps.core.responses import api_response
+
 from .models import Category, Item, Auction, Bid, AuctionWatch
 from .serializers import (
     CategorySerializer,
@@ -20,10 +24,9 @@ from .serializers import (
     AuctionSerializer,
     BidSerializer,
 )
-from apps.core.mixins import SwaggerSchemaMixin
 
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(ApiResponseMixin, viewsets.ModelViewSet):
     """API endpoints for managing categories"""
 
     queryset = Category.objects.all()
@@ -47,7 +50,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
         tags=["Categories"],
     )
     def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return api_response(
+            data=serializer.data, message="Categories retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="create_category",
@@ -56,7 +68,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
         tags=["Categories"],
     )
     def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return api_response(
+            data=serializer.data,
+            message="Category created successfully",
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
     @swagger_auto_schema(
         operation_id="retrieve_category",
@@ -65,7 +86,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
         tags=["Categories"],
     )
     def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return api_response(
+            data=serializer.data, message="Category details retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="update_category",
@@ -74,7 +99,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
         tags=["Categories"],
     )
     def update(self, request, *args, **kwargs):
-        return super().update(request, *args, **kwargs)
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return api_response(
+            data=serializer.data, message="Category updated successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="delete_category",
@@ -83,10 +115,12 @@ class CategoryViewSet(viewsets.ModelViewSet):
         tags=["Categories"],
     )
     def destroy(self, request, *args, **kwargs):
-        return super().destroy(request, *args, **kwargs)
+        instance = self.get_object()
+        instance.delete()
+        return api_response(message="Category deleted successfully")
 
 
-class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
+class AuctionViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet):
     """API endpoints for managing auctions"""
 
     serializer_class = AuctionSerializer
@@ -153,7 +187,9 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Auctions retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="create_auction",
@@ -168,11 +204,6 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
                 ),
                 "description": openapi.Schema(
                     type=openapi.TYPE_STRING, description="Auction description"
-                ),
-                "item": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    format=openapi.FORMAT_UUID,
-                    description="Existing item ID (optional if item_data is provided)",
                 ),
                 "item_data": openapi.Schema(
                     type=openapi.TYPE_OBJECT,
@@ -190,7 +221,7 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
                         ),
                         "category_name": openapi.Schema(
                             type=openapi.TYPE_STRING,
-                            description="New category name (optional if category is provided)",
+                            description="New category name (if category is not provided)",
                         ),
                         "image_urls": openapi.Schema(
                             type=openapi.TYPE_ARRAY,
@@ -236,6 +267,7 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
             required=[
                 "title",
                 "description",
+                "item_data",
                 "starting_price",
                 "start_time",
                 "end_time",
@@ -246,7 +278,16 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         security=[{"Bearer": []}],
     )
     def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return api_response(
+            data=serializer.data,
+            message="Auction created successfully",
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
     @swagger_auto_schema(
         operation_id="retrieve_auction",
@@ -256,7 +297,11 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         responses={200: AuctionSerializer},
     )
     def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return api_response(
+            data=serializer.data, message="Auction details retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="update_auction",
@@ -269,18 +314,28 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         auction = self.get_object()
 
         if auction.seller != request.user:
-            return Response(
-                {"detail": "You do not have permission to update this auction."},
+            return api_response(
+                success=False,
+                message="Permission denied",
+                errors={"detail": "You do not have permission to update this auction."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         if auction.status != Auction.STATUS_DRAFT and auction.bids.exists():
-            return Response(
-                {"detail": "Cannot update auction that has bids."},
+            return api_response(
+                success=False,
+                message="Cannot update auction with bids",
+                errors={"detail": "Cannot update auction that has bids."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        return super().update(request, *args, **kwargs)
+        partial = kwargs.pop("partial", False)
+        serializer = self.get_serializer(auction, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return api_response(
+            data=serializer.data, message="Auction updated successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="delete_auction",
@@ -293,18 +348,23 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         auction = self.get_object()
 
         if auction.seller != request.user:
-            return Response(
-                {"detail": "You do not have permission to delete this auction."},
+            return api_response(
+                success=False,
+                message="Permission denied",
+                errors={"detail": "You do not have permission to delete this auction."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         if auction.bids.exists():
-            return Response(
-                {"detail": "Cannot delete auction that has bids."},
+            return api_response(
+                success=False,
+                message="Cannot delete auction with bids",
+                errors={"detail": "Cannot delete auction that has bids."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        return super().destroy(request, *args, **kwargs)
+        auction.delete()
+        return api_response(message="Auction deleted successfully")
 
     @swagger_auto_schema(
         operation_id="cancel_auction",
@@ -318,14 +378,18 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         auction = self.get_object()
 
         if auction.seller != request.user:
-            return Response(
-                {"detail": "You do not have permission to cancel this auction."},
+            return api_response(
+                success=False,
+                message="Permission denied",
+                errors={"detail": "You do not have permission to cancel this auction."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         if auction.status in [Auction.STATUS_ENDED, Auction.STATUS_SOLD]:
-            return Response(
-                {"detail": "Cannot cancel an ended auction."},
+            return api_response(
+                success=False,
+                message="Cannot cancel ended auction",
+                errors={"detail": "Cannot cancel an ended auction."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -337,7 +401,9 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         )
 
         serializer = self.get_serializer(auction)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Auction cancelled successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="watch_auction",
@@ -352,21 +418,24 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         user = request.user
 
         if auction.seller == user:
-            return Response(
-                {"detail": "Cannot watch your own auction."},
+            return api_response(
+                success=False,
+                message="Cannot watch own auction",
+                errors={"detail": "Cannot watch your own auction."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if AuctionWatch.objects.filter(user=user, auction=auction).exists():
-            return Response(
-                {"detail": "Already watching this auction."},
+            return api_response(
+                success=False,
+                message="Already watching this auction",
+                errors={"detail": "Already watching this auction."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         watch = AuctionWatch.objects.create(user=user, auction=auction)
-
-        return Response(
-            {"detail": "Auction added to watchlist."}, status=status.HTTP_201_CREATED
+        return api_response(
+            message="Auction added to watchlist", status=status.HTTP_201_CREATED
         )
 
     @swagger_auto_schema(
@@ -384,12 +453,12 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         watch = AuctionWatch.objects.filter(user=user, auction=auction).first()
         if watch:
             watch.delete()
-            return Response(
-                {"detail": "Auction removed from watchlist."}, status=status.HTTP_200_OK
-            )
+            return api_response(message="Auction removed from watchlist")
         else:
-            return Response(
-                {"detail": "Auction was not in watchlist."},
+            return api_response(
+                success=False,
+                message="Auction was not in watchlist",
+                errors={"detail": "Auction was not in watchlist."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -414,7 +483,9 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Watched auctions retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="get_my_auctions",
@@ -438,10 +509,12 @@ class AuctionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Your auctions retrieved successfully"
+        )
 
 
-class BidViewSet(viewsets.ModelViewSet):
+class BidViewSet(ApiResponseMixin, viewsets.ModelViewSet):
     """API endpoints for auction bids"""
 
     serializer_class = BidSerializer
@@ -481,7 +554,14 @@ class BidViewSet(viewsets.ModelViewSet):
         responses={200: BidSerializer(many=True)},
     )
     def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return api_response(data=serializer.data, message="Bids retrieved successfully")
 
     @swagger_auto_schema(
         operation_id="create_bid",
@@ -498,6 +578,11 @@ class BidViewSet(viewsets.ModelViewSet):
                 bid = serializer.save()
 
                 auction = bid.auction
+
+                Bid.objects.filter(auction=auction, status=Bid.STATUS_ACTIVE).exclude(
+                    id=bid.id
+                ).update(status=Bid.STATUS_OUTBID)
+
                 if auction.buy_now_price and bid.amount >= auction.buy_now_price:
                     auction.status = Auction.STATUS_SOLD
                     auction.save()
@@ -507,8 +592,17 @@ class BidViewSet(viewsets.ModelViewSet):
 
                     auction.bids.exclude(id=bid.id).update(status=Bid.STATUS_LOST)
 
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(
+                data=serializer.data,
+                message="Bid placed successfully",
+                status=status.HTTP_201_CREATED,
+            )
+        return api_response(
+            success=False,
+            message="Failed to place bid",
+            errors=serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     @swagger_auto_schema(
         operation_id="retrieve_bid",
@@ -518,7 +612,11 @@ class BidViewSet(viewsets.ModelViewSet):
         responses={200: BidSerializer},
     )
     def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return api_response(
+            data=serializer.data, message="Bid details retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="get_my_bids",
@@ -542,7 +640,9 @@ class BidViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="Your bids retrieved successfully"
+        )
 
 
 @api_view(["GET"])
@@ -589,7 +689,9 @@ def search_auctions(request):
         queryset = queryset.order_by("-starting_price")
 
     serializer = AuctionSerializer(queryset, many=True, context={"request": request})
-    return Response(serializer.data)
+    return api_response(
+        data=serializer.data, message="Search results retrieved successfully"
+    )
 
 
 @api_view(["GET"])
@@ -629,7 +731,9 @@ def auction_stats(request, auction_id):
         bid_serializer = BidSerializer(bids, many=True)
         response_data["bid_history"] = bid_serializer.data
 
-    return Response(response_data)
+    return api_response(
+        data=response_data, message="Auction statistics retrieved successfully"
+    )
 
 
 @api_view(["GET"])
@@ -677,7 +781,7 @@ def search_items(request):
         queryset = queryset.filter(category=category)
 
     serializer = ItemSerializer(queryset, many=True)
-    return Response(serializer.data)
+    return api_response(data=serializer.data, message="Items retrieved successfully")
 
 
 @api_view(["GET"])
@@ -693,10 +797,13 @@ def list_all_categories(request):
     """Get all categories"""
     categories = Category.objects.all()
     serializer = CategorySerializer(categories, many=True)
-    return Response({"categories": serializer.data})
+    return api_response(
+        data={"categories": serializer.data},
+        message="All categories retrieved successfully",
+    )
 
 
-class AutoBidViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
+class AutoBidViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet):
     """API endpoints for managing automatic bidding"""
 
     serializer_class = AutoBidSerializer
@@ -717,7 +824,16 @@ class AutoBidViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         responses={200: AutoBidSerializer(many=True)},
     )
     def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return api_response(
+            data=serializer.data, message="AutoBids retrieved successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="create_autobid",
@@ -736,13 +852,19 @@ class AutoBidViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         try:
             wallet = Wallet.objects.get(user=request.user)
             if wallet.balance < max_amount:
-                return Response(
-                    {"detail": "Insufficient funds in wallet for maximum bid amount."},
+                return api_response(
+                    success=False,
+                    message="Insufficient funds",
+                    errors={
+                        "detail": "Insufficient funds in wallet for maximum bid amount."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         except Wallet.DoesNotExist:
-            return Response(
-                {"detail": "You need to create a wallet first."},
+            return api_response(
+                success=False,
+                message="Wallet required",
+                errors={"detail": "You need to create a wallet first."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -757,8 +879,11 @@ class AutoBidViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         )
 
         result_serializer = self.get_serializer(autobid)
-        return Response(
-            result_serializer.data,
+        return api_response(
+            data=result_serializer.data,
+            message="AutoBid created successfully"
+            if created
+            else "AutoBid updated successfully",
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
@@ -776,7 +901,9 @@ class AutoBidViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         autobid.save()
 
         serializer = self.get_serializer(autobid)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="AutoBid deactivated successfully"
+        )
 
     @swagger_auto_schema(
         operation_id="activate_autobid",
@@ -792,4 +919,6 @@ class AutoBidViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         autobid.save()
 
         serializer = self.get_serializer(autobid)
-        return Response(serializer.data)
+        return api_response(
+            data=serializer.data, message="AutoBid activated successfully"
+        )

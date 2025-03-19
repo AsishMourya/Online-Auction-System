@@ -3,9 +3,9 @@ from django.utils import timezone
 from decimal import Decimal
 from django.shortcuts import get_object_or_404
 
-from apps.accounts.models import PaymentMethod
+from apps.accounts.models import PaymentMethod, Wallet
 from apps.auctions.models import Auction, Bid
-from .models import Transaction, AccountBalance, TransactionLog
+from .models import Transaction, TransactionLog
 
 
 def process_deposit(user, amount, payment_method_id):
@@ -53,10 +53,10 @@ def process_deposit(user, amount, payment_method_id):
                 details={"payment_method": str(payment_method.id)},
             )
 
-            balance, created = AccountBalance.objects.get_or_create(user=user)
-
-            balance.available_balance += amount
-            balance.save()
+            wallet, created = Wallet.objects.get_or_create(user=user)
+            wallet._previous_balance = wallet.balance
+            wallet.balance += amount
+            wallet.save()
 
         return tx
     except Exception as e:
@@ -87,12 +87,9 @@ def process_withdrawal(user, amount, payment_method_id):
         if amount <= 0:
             return None
 
-        try:
-            balance = AccountBalance.objects.get(user=user)
-        except AccountBalance.DoesNotExist:
-            balance = AccountBalance.objects.create(user=user)
+        wallet, created = Wallet.objects.get_or_create(user=user)
 
-        if balance.available_balance < amount:
+        if wallet.balance < amount:
             return None
 
         with transaction.atomic():
@@ -117,8 +114,9 @@ def process_withdrawal(user, amount, payment_method_id):
                 details={"payment_method": str(payment_method.id)},
             )
 
-            balance.available_balance -= amount
-            balance.save()
+            wallet._previous_balance = wallet.balance
+            wallet.balance -= amount
+            wallet.save()
 
         return tx
     except Exception as e:
@@ -177,14 +175,12 @@ def process_auction_purchase(bid_id):
                 completed_at=timezone.now(),
             )
 
-            buyer_balance, _ = AccountBalance.objects.get_or_create(user=bid.bidder)
+            buyer_balance, _ = Wallet.objects.get_or_create(user=bid.bidder)
             buyer_balance.held_balance -= bid.amount
             buyer_balance.save()
 
-            seller_balance, _ = AccountBalance.objects.get_or_create(
-                user=auction.seller
-            )
-            seller_balance.available_balance += net_seller_amount
+            seller_balance, _ = Wallet.objects.get_or_create(user=auction.seller)
+            seller_balance.balance += net_seller_amount
             seller_balance.save()
 
         return (purchase_tx, sale_tx)
@@ -243,11 +239,106 @@ def initiate_refund(transaction_id, amount=None, reason=None):
                 },
             )
 
-            balance, _ = AccountBalance.objects.get_or_create(user=original_tx.user)
-            balance.available_balance += amount
-            balance.save()
+            wallet, _ = Wallet.objects.get_or_create(user=original_tx.user)
+            wallet._previous_balance = wallet.balance
+            wallet.balance += amount
+            wallet.save()
 
         return refund_tx
     except Exception as e:
         print(f"Error processing refund: {str(e)}")
         return None
+
+
+from decimal import Decimal
+from django.utils import timezone
+from .models import Transaction, TransactionLog
+
+
+def initiate_refund(transaction):
+    """
+    Initiate a refund for a transaction
+
+    Args:
+        transaction: The transaction to refund
+
+    Returns:
+        The refund transaction
+    """
+    if transaction.status != "completed":
+        raise ValueError("Can only refund completed transactions")
+
+    refund = Transaction.objects.create(
+        user=transaction.user,
+        transaction_type="refund",
+        amount=transaction.amount,
+        status="pending",
+        reference=f"Refund for {transaction.reference}",
+        reference_id=transaction.id,
+    )
+
+    TransactionLog.objects.create(
+        transaction=refund,
+        action="initiate_refund",
+        status_before="pending",
+        status_after="pending",
+        details={
+            "original_transaction": str(transaction.id),
+            "amount": str(transaction.amount),
+            "initiated_at": timezone.now().isoformat(),
+        },
+    )
+
+    return refund
+
+
+def process_payment_notification(transaction):
+    """
+    Create a single payment notification for a transaction.
+    This function should be called after a transaction is completed.
+
+    Args:
+        transaction: The transaction to create a notification for
+    """
+    from apps.notifications.services import create_notification
+    from apps.notifications.models import Notification
+    from .models import TransactionLog
+
+    notification_logs = TransactionLog.objects.filter(
+        transaction=transaction, action="notification_sent"
+    )
+
+    if notification_logs.exists():
+        return None
+
+    user = transaction.user
+    is_deposit = transaction.transaction_type in ("deposit", "sale", "refund")
+
+    if is_deposit:
+        title = "Payment Received"
+        message = f"Received {transaction.amount} for {transaction.reference}"
+    else:
+        title = "Payment Sent"
+        message = f"Sent {transaction.amount} for {transaction.reference}"
+
+    notification = create_notification(
+        recipient=user,
+        notification_type=Notification.TYPE_PAYMENT,
+        title=title,
+        message=message,
+        priority=Notification.PRIORITY_HIGH,
+        related_object_id=transaction.id,
+        related_object_type="transaction",
+    )
+
+    if notification:
+        TransactionLog.objects.create(
+            transaction=transaction,
+            action="notification_sent",
+            details={
+                "notification_id": str(notification.id),
+                "sent_at": timezone.now().isoformat(),
+            },
+        )
+
+    return notification

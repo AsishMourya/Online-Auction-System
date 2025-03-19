@@ -117,6 +117,8 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ],
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    "DEFAULT_PAGINATION_CLASS": "apps.core.responses.CustomPagination",
+    "PAGE_SIZE": 20,
 }
 
 # SimpleJWT settings
@@ -170,12 +172,11 @@ SWAGGER_SETTINGS = {
     "SECURITY_DEFINITIONS": {
         "Bearer": {
             "type": "apiKey",
-            "in": "header",
             "name": "Authorization",
-            "description": "Enter your bearer token in the format: Bearer <token>",
-        }
+            "in": "header",
+        },
     },
-    "DEFAULT_SECURITY": [{"Bearer": []}],
+    "USE_SESSION_AUTH": False,
 }
 
 
