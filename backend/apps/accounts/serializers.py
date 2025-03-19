@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import Address, PaymentMethod, User
+from .models import Address, PaymentMethod, User, Wallet
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -183,3 +183,57 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "user", "created_at"]
         extra_kwargs = {"account_identifier": {"write_only": False, "read_only": False}}
+
+
+class WalletSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    total_balance = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+    available_balance = serializers.DecimalField(
+        max_digits=12, decimal_places=2, source="balance", read_only=True
+    )
+    active_bids_count = serializers.SerializerMethodField()
+    won_auctions_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Wallet
+        fields = [
+            "id",
+            "user",
+            "user_email",
+            "available_balance",
+            "pending_balance",
+            "held_balance",
+            "total_balance",
+            "active_bids_count",
+            "won_auctions_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "user",
+            "user_email",
+            "available_balance",
+            "pending_balance",
+            "held_balance",
+            "total_balance",
+            "active_bids_count",
+            "won_auctions_count",
+            "created_at",
+            "updated_at",
+        ]
+        ref_name = "AccountWalletSerializer"
+
+    def get_active_bids_count(self, obj):
+        """Get count of active bids for this user"""
+        from apps.auctions.models import Bid
+
+        return Bid.objects.filter(bidder=obj.user, status=Bid.STATUS_ACTIVE).count()
+
+    def get_won_auctions_count(self, obj):
+        """Get count of auctions won by this user"""
+        from apps.auctions.models import Bid
+
+        return Bid.objects.filter(bidder=obj.user, status=Bid.STATUS_WON).count()

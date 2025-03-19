@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Transaction, AccountBalance, TransactionLog
+from .models import Transaction, TransactionLog
 
 
 class TransactionLogInline(admin.TabularInline):
@@ -36,23 +36,6 @@ class TransactionAdmin(admin.ModelAdmin):
         ("Payment Details", {"fields": ("payment_method", "external_id")}),
         ("Timestamps", {"fields": ("created_at", "updated_at", "completed_at")}),
     )
-
-
-@admin.register(AccountBalance)
-class AccountBalanceAdmin(admin.ModelAdmin):
-    list_display = (
-        "user",
-        "available_balance",
-        "pending_balance",
-        "held_balance",
-        "total_balance",
-        "last_updated",
-    )
-    search_fields = ("user__email",)
-    readonly_fields = ("last_updated", "total_balance")
-
-    def total_balance(self, obj):
-        return obj.total_balance
 
 
 @admin.register(TransactionLog)

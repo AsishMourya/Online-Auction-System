@@ -5,11 +5,12 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 
-from apps.core.mixins import SwaggerSchemaMixin
+from apps.core.mixins import SwaggerSchemaMixin, ApiResponseMixin
+from apps.core.responses import api_response
 
-from .models import AccountBalance, Transaction, Wallet
+from .models import Transaction
+from apps.accounts.models import Wallet
 from .serializers import (
-    AccountBalanceSerializer,
     TransactionSerializer,
     WalletSerializer,
 )
@@ -19,7 +20,7 @@ from .services import (
 )
 
 
-class TransactionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
+class TransactionViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet):
     """API endpoints for user's transaction history"""
 
     serializer_class = TransactionSerializer
@@ -71,11 +72,9 @@ class TransactionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response(
-            {
-                "message": "Transactions retrieved successfully",
-                "transactions": serializer.data,
-            }
+        return api_response(
+            data={"transactions": serializer.data},
+            message="Transactions retrieved successfully",
         )
 
     @swagger_auto_schema(
@@ -89,11 +88,9 @@ class TransactionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
-        return Response(
-            {
-                "message": "Transaction details retrieved successfully",
-                "transaction": serializer.data,
-            }
+        return api_response(
+            data={"transaction": serializer.data},
+            message="Transaction details retrieved successfully",
         )
 
     @swagger_auto_schema(
@@ -129,25 +126,27 @@ class TransactionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         payment_method_id = request.data.get("payment_method_id")
 
         if not amount or float(amount) <= 0:
-            return Response(
-                {"detail": "Amount must be greater than zero."},
+            return api_response(
+                success=False,
+                message="Amount must be greater than zero",
                 status=status.HTTP_400_BAD_REQUEST,
+                errors={"amount": ["Amount must be greater than zero"]},
             )
 
         transaction = process_deposit(request.user, amount, payment_method_id)
 
         if transaction:
             serializer = self.get_serializer(transaction)
-            return Response(
-                {
-                    "message": "Deposit processed successfully",
-                    "transaction": serializer.data,
-                }
+            return api_response(
+                data={"transaction": serializer.data},
+                message="Deposit processed successfully",
             )
         else:
-            return Response(
-                {"detail": "Failed to process deposit."},
+            return api_response(
+                success=False,
+                message="Failed to process deposit",
                 status=status.HTTP_400_BAD_REQUEST,
+                errors={"detail": "Failed to process deposit"},
             )
 
     @swagger_auto_schema(
@@ -209,28 +208,30 @@ class TransactionViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
 @permission_classes([permissions.IsAuthenticated])
 @swagger_auto_schema(
     operation_id="get_account_balance",
-    operation_summary="Get account balance",
-    operation_description="Get current account balance for the user",
-    tags=["Account"],
-    responses={200: AccountBalanceSerializer, 404: "Account not found"},
+    operation_summary="Get wallet balance",
+    operation_description="Get current wallet balance for the user",
+    tags=["Wallet"],
+    responses={200: WalletSerializer, 404: "Wallet not found"},
 )
 def get_account_balance(request):
-    """Get current account balance for the user"""
+    """Get current wallet balance for the user"""
     try:
-        balance = AccountBalance.objects.get(user=request.user)
-    except AccountBalance.DoesNotExist:
-        balance = AccountBalance.objects.create(user=request.user)
+        wallet, created = Wallet.objects.get_or_create(user=request.user)
+    except Exception as e:
+        return api_response(
+            success=False,
+            message=f"Error retrieving wallet: {str(e)}",
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
-    serializer = AccountBalanceSerializer(balance)
-    return Response(
-        {
-            "message": "Account balance retrieved successfully",
-            "balance": serializer.data,
-        }
+    serializer = WalletSerializer(wallet)
+    return api_response(
+        data={"wallet": serializer.data},
+        message="Wallet balance retrieved successfully",
     )
 
 
-class WalletViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
+class WalletViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet):
     """API endpoints for user's wallet"""
 
     serializer_class = WalletSerializer
@@ -255,13 +256,11 @@ class WalletViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         wallet, created = Wallet.objects.get_or_create(user=request.user)
         serializer = self.get_serializer(wallet)
 
-        return Response(
-            {
-                "message": "Wallet retrieved successfully"
-                if not created
-                else "Wallet created successfully",
-                "wallet": serializer.data,
-            }
+        return api_response(
+            data={"wallet": serializer.data},
+            message="Wallet retrieved successfully"
+            if not created
+            else "Wallet created successfully",
         )
 
     @swagger_auto_schema(
@@ -297,9 +296,11 @@ class WalletViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
         payment_method_id = request.data.get("payment_method_id")
 
         if not amount or float(amount) <= 0:
-            return Response(
-                {"detail": "Amount must be greater than zero."},
+            return api_response(
+                success=False,
+                message="Amount must be greater than zero",
                 status=status.HTTP_400_BAD_REQUEST,
+                errors={"amount": ["Amount must be greater than zero"]},
             )
 
         transaction = process_deposit(request.user, amount, payment_method_id)
@@ -309,11 +310,14 @@ class WalletViewSet(SwaggerSchemaMixin, viewsets.ModelViewSet):
             wallet.deposit(Decimal(str(amount)))
 
             serializer = self.get_serializer(wallet)
-            return Response(
-                {"message": "Wallet topped up successfully", "wallet": serializer.data}
+            return api_response(
+                data={"wallet": serializer.data},
+                message="Wallet topped up successfully",
             )
         else:
-            return Response(
-                {"detail": "Failed to process top-up."},
+            return api_response(
+                success=False,
+                message="Failed to process top-up",
                 status=status.HTTP_400_BAD_REQUEST,
+                errors={"detail": "Failed to process top-up"},
             )

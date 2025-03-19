@@ -59,6 +59,9 @@ class Notification(models.Model):
         indexes = [
             models.Index(fields=["recipient", "is_read"]),
             models.Index(fields=["notification_type"]),
+            models.Index(
+                fields=["related_object_id", "related_object_type"]
+            ),  # Added index for related objects
         ]
 
     def __str__(self):

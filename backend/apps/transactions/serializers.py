@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Transaction, AccountBalance, TransactionLog, Wallet, AutoBid
+from .models import Transaction, TransactionLog, AutoBid
+from apps.accounts.models import Wallet
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -47,27 +48,6 @@ class TransactionSerializer(serializers.ModelSerializer):
         return None
 
 
-class AccountBalanceSerializer(serializers.ModelSerializer):
-    user_email = serializers.EmailField(source="user.email", read_only=True)
-    total_balance = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True
-    )
-
-    class Meta:
-        model = AccountBalance
-        fields = [
-            "id",
-            "user",
-            "user_email",
-            "available_balance",
-            "pending_balance",
-            "held_balance",
-            "total_balance",
-            "last_updated",
-        ]
-        read_only_fields = ["id", "user", "user_email", "last_updated", "total_balance"]
-
-
 class TransactionLogSerializer(serializers.ModelSerializer):
     transaction_reference = serializers.CharField(
         source="transaction.reference", read_only=True
@@ -90,18 +70,38 @@ class TransactionLogSerializer(serializers.ModelSerializer):
 
 class WalletSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)
+    total_balance = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+    available_balance = serializers.DecimalField(
+        max_digits=12, decimal_places=2, source="balance", read_only=True
+    )
 
     class Meta:
         model = Wallet
-        fields = ["id", "user", "user_email", "balance", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "user",
+            "user_email",
+            "available_balance",
+            "pending_balance",
+            "held_balance",
+            "total_balance",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = [
             "id",
             "user",
             "user_email",
-            "balance",
+            "available_balance",
+            "pending_balance",
+            "held_balance",
+            "total_balance",
             "created_at",
             "updated_at",
         ]
+        ref_name = "TransactionWalletSerializer"
 
 
 class AutoBidSerializer(serializers.ModelSerializer):
