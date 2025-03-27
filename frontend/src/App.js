@@ -6,11 +6,14 @@ import AuctionDetailPage from './pages/AuctionDetailPage';
 import AuthPage from './pages/AuthPage';
 import ProfilePage from './pages/ProfilePage';
 import CreateAuctionPage from './pages/CreateAuctionPage';
+import Navbar from './pages/Navbar';
 import './App.css';
 
 function App() {
   return (
     <Router>
+      <Navbar />
+      <div className="app-container"></div>
       <Routes>
         {/* Home and Browse */}
         <Route path="/" element={<HomePage />} />
