@@ -28,6 +28,11 @@ body {
   pointer-events: none;
 }
 
+/* .app-container {
+  padding-top: 20px;
+  min-height: calc(100vh - 80px);
+} */
+
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
     animation: App-logo-spin infinite 20s linear;

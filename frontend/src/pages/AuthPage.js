@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom'; // Add useLocation
 import axios from 'axios';
 import '../styles/AuthPage.css';
 
 const AuthPage = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const location = useLocation(); // Get current location
+  const navigate = useNavigate();
+  
+  // Initialize login state based on URL path
+  const [isLogin, setIsLogin] = useState(location.pathname !== '/register');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -13,7 +17,11 @@ const AuthPage = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+
+  // Update isLogin state when URL changes
+  useEffect(() => {
+    setIsLogin(location.pathname !== '/register');
+  }, [location.pathname]);
 
   const handleChange = (e) => {
     setFormData({
@@ -63,6 +71,16 @@ const AuthPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Update switch button handler to change URL
+  const handleSwitchMode = () => {
+    if (isLogin) {
+      navigate('/register');
+    } else {
+      navigate('/login');
+    }
+    // No need to call setIsLogin here as the useEffect will handle that based on URL
   };
 
   return (
@@ -135,7 +153,7 @@ const AuthPage = () => {
             {isLogin ? "Don't have an account?" : "Already have an account?"}
             <button 
               className="switch-btn" 
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={handleSwitchMode}
             >
               {isLogin ? 'Register' : 'Login'}
             </button>
