@@ -1,137 +1,70 @@
-### Step 1: Set Up Your React Project
+# Getting Started with Create React App
 
-1. **Install Node.js**: Make sure you have Node.js installed on your machine. You can download it from [nodejs.org](https://nodejs.org/).
+This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
-2. **Create a New React App**: Use Create React App to set up your project. Open your terminal and run the following command:
+## Available Scripts
 
-   ```bash
-   npx create-react-app online-auction-frontend
-   ```
+In the project directory, you can run:
 
-3. **Navigate to Your Project Directory**:
+### `npm start`
 
-   ```bash
-   cd online-auction-frontend
-   ```
+Runs the app in the development mode.\
+Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-### Step 2: Install Axios
+The page will reload when you make changes.\
+You may also see any lint errors in the console.
 
-4. **Install Axios**: Run the following command to install Axios:
+### `npm test`
 
-   ```bash
-   npm install axios
-   ```
+Launches the test runner in the interactive watch mode.\
+See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
 
-### Step 3: Set Up Your Project Structure
+### `npm run build`
 
-5. **Create the Directory Structure**: You can create the necessary directories and files as per the proposed structure. You can do this manually or use the terminal. Here’s how to create the main directories:
+Builds the app for production to the `build` folder.\
+It correctly bundles React in production mode and optimizes the build for the best performance.
 
-   ```bash
-   mkdir -p src/api src/components/common src/components/auctions src/components/auth src/components/wallet src/contexts src/hooks src/pages src/utils
-   ```
+The build is minified and the filenames include the hashes.\
+Your app is ready to be deployed!
 
-### Step 4: Create Basic Files
+See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
-6. **Create Basic Files**: You can create some basic files to get started. For example:
+### `npm run eject`
 
-   ```bash
-   touch src/api/index.js src/api/auction.js src/api/auth.js src/api/bid.js src/api/transaction.js src/api/wallet.js
-   touch src/components/common/Header.js src/components/common/Footer.js src/components/common/Loading.js src/components/common/ErrorMessage.js
-   touch src/components/auctions/AuctionCard.js src/components/auctions/AuctionDetail.js src/components/auctions/AuctionForm.js src/components/auctions/AuctionList.js src/components/auctions/BidForm.js
-   touch src/components/auth/LoginForm.js src/components/auth/RegisterForm.js src/components/auth/ProfileForm.js
-   touch src/components/wallet/WalletSummary.js src/components/wallet/DepositForm.js src/components/wallet/TransactionList.js
-   touch src/contexts/AuthContext.js src/contexts/NotificationContext.js
-   touch src/hooks/useAuth.js src/hooks/useAxios.js src/hooks/useForm.js
-   touch src/pages/HomePage.js src/pages/LoginPage.js src/pages/RegisterPage.js src/pages/ProfilePage.js src/pages/AuctionsPage.js src/pages/AuctionDetailPage.js src/pages/CreateAuctionPage.js src/pages/MyAuctionsPage.js src/pages/MyBidsPage.js src/pages/WalletPage.js
-   touch src/utils/axiosConfig.js src/utils/dateFormatter.js src/utils/priceFormatter.js
-   ```
+**Note: this is a one-way operation. Once you `eject`, you can't go back!**
 
-### Step 5: Set Up Axios Configuration
+If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-7. **Configure Axios**: In `src/utils/axiosConfig.js`, you can set up a basic Axios instance:
+Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
 
-   ```javascript
-   import axios from 'axios';
+You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
-   const axiosInstance = axios.create({
-       baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
-       timeout: 10000,
-   });
+## Learn More
 
-   export default axiosInstance;
-   ```
+You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
-### Step 6: Create a Sample Component
+To learn React, check out the [React documentation](https://reactjs.org/).
 
-8. **Create a Sample Component**: For example, in `src/pages/HomePage.js`, you can create a simple component that fetches data using Axios:
+### Code Splitting
 
-   ```javascript
-   import React, { useEffect, useState } from 'react';
-   import axios from '../utils/axiosConfig';
+This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
 
-   const HomePage = () => {
-       const [data, setData] = useState([]);
-       const [loading, setLoading] = useState(true);
-       const [error, setError] = useState(null);
+### Analyzing the Bundle Size
 
-       useEffect(() => {
-           const fetchData = async () => {
-               try {
-                   const response = await axios.get('/auctions');
-                   setData(response.data);
-               } catch (err) {
-                   setError(err);
-               } finally {
-                   setLoading(false);
-               }
-           };
+This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
 
-           fetchData();
-       }, []);
+### Making a Progressive Web App
 
-       if (loading) return <div>Loading...</div>;
-       if (error) return <div>Error: {error.message}</div>;
+This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
 
-       return (
-           <div>
-               <h1>Auctions</h1>
-               <ul>
-                   {data.map(auction => (
-                       <li key={auction.id}>{auction.title}</li>
-                   ))}
-               </ul>
-           </div>
-       );
-   };
+### Advanced Configuration
 
-   export default HomePage;
-   ```
+This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
 
-### Step 7: Update the App Component
+### Deployment
 
-9. **Update `src/App.js`**: Import and use the `HomePage` component:
+This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
 
-   ```javascript
-   import React from 'react';
-   import HomePage from './pages/HomePage';
+### `npm run build` fails to minify
 
-   const App = () => {
-       return (
-           <div>
-               <HomePage />
-           </div>
-       );
-   };
-
-   export default App;
-   ```
-
-### Step 8: Run Your Application
-
-10. **Start the Development Server**: Run the following command to start your React application:
-
-    ```bash
-    npm start
-    ```
-
-Your React application should now be running, and you can start building out your features using Axios for HTTP requests!
+This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
