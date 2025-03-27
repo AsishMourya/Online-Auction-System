@@ -1,0 +1,473 @@
+.profile-page {
+    padding: 40px 0;
+  }
+  
+  .profile-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 30px;
+    align-items: center;
+    margin-bottom: 40px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .profile-avatar {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    overflow: hidden;
+  }
+  
+  .profile-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .profile-info {
+    flex: 1;
+    min-width: 250px;
+  }
+  
+  .profile-info h1 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+  }
+  
+  .profile-meta {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 15px;
+    color: #666;
+  }
+  
+  .profile-bio {
+    color: #555;
+    line-height: 1.5;
+  }
+  
+  .profile-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .profile-tabs {
+    margin-bottom: 40px;
+  }
+  
+  .tabs-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 20px;
+  }
+  
+  .tab-btn {
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    color: #666;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s;
+  }
+  
+  .tab-btn:hover {
+    color: #4a90e2;
+  }
+  
+  .tab-btn.active {
+    color: #4a90e2;
+    border-bottom-color: #4a90e2;
+  }
+  
+  .tab-pane {
+    padding: 20px 0;
+  }
+  
+  .tab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+  }
+  
+  .tab-header h2 {
+    margin: 0;
+    color: #333;
+  }
+  
+  .empty-state {
+    text-align: center;
+    padding: 50px 20px;
+    background-color: #f9f9f9;
+    border-radius: 10px;
+  }
+  
+  .empty-state p {
+    margin-bottom: 20px;
+    color: #666;
+  }
+  
+  /* Listings Grid */
+  .listings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 30px;
+  }
+  
+  .listing-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
+    background-color: white;
+  }
+  
+  .listing-image {
+    height: 200px;
+    overflow: hidden;
+    position: relative;
+  }
+  
+  .listing-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .listing-status {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  
+  .listing-status.active {
+    background-color: #d4edda;
+    color: #155724;
+  }
+  
+  .listing-status.ended {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+  
+  .listing-details {
+    padding: 20px;
+  }
+  
+  .listing-details h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+  }
+  
+  .current-bid, .bid-count, .time-remaining {
+    margin-bottom: 5px;
+  }
+  
+  .listing-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+  }
+  
+  /* Bids List */
+  .bids-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .bid-card {
+    display: flex;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    background-color: white;
+  }
+  
+  .bid-image {
+    width: 150px;
+    overflow: hidden;
+  }
+  
+  .bid-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .bid-details {
+    flex: 1;
+    padding: 20px;
+  }
+  
+  .bid-details h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #333;
+  }
+  
+  .bid-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 15px;
+  }
+  
+  .bold {
+    font-weight: 600;
+  }
+  
+  .bid-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin-left: 5px;
+  }
+  
+  .bid-status.winning {
+    background-color: #d4edda;
+    color: #155724;
+  }
+  
+  .bid-status.outbid {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+  
+  .bid-status.lost {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+  
+  .bid-time {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+  }
+  
+  .bid-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+  }
+  
+  /* Won Auctions */
+  .won-auctions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 30px;
+  }
+  
+  .won-auction-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
+    background-color: white;
+  }
+  
+  .won-auction-image {
+    height: 200px;
+    overflow: hidden;
+  }
+  
+  .won-auction-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .won-auction-details {
+    padding: 20px;
+  }
+  
+  .won-auction-details h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+  }
+  
+  .final-bid {
+    font-weight: bold;
+    color: #4a90e2;
+    margin-bottom: 5px;
+  }
+  
+  .won-date {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+  }
+  
+  .status-indicators {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  
+  .status-indicator {
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.85rem;
+  }
+  
+  .status-indicator.completed {
+    background-color: #d4edda;
+    color: #155724;
+  }
+  
+  .status-indicator.pending {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+  
+  .status-indicator.shipped, .status-indicator.delivered {
+    background-color: #d1ecf1;
+    color: #0c5460;
+  }
+  
+  .won-auction-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+  }
+  
+  /* Watchlist */
+  .watchlist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 30px;
+  }
+  
+  .watchlist-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
+    background-color: white;
+  }
+  
+  .watchlist-image {
+    height: 200px;
+    overflow: hidden;
+  }
+  
+  .watchlist-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .watchlist-details {
+    padding: 20px;
+  }
+  
+  .watchlist-details h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+  }
+  
+  .watchlist-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+  }
+  
+  /* Settings Form */
+  .settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+  }
+  
+  .form-section {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border-radius: 10px;
+  }
+  
+  .form-section h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #333;
+  }
+  
+  .form-check {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  .form-check input[type="checkbox"] {
+    margin-right: 10px;
+    width: auto;
+  }
+  
+  .danger-zone {
+    border-top: 1px solid #eee;
+    padding-top: 30px;
+    margin-top: 20px;
+  }
+  
+  .btn-danger {
+    background-color: #dc3545;
+    color: white;
+  }
+  
+  .btn-danger:hover {
+    background-color: #c82333;
+  }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .profile-header {
+      flex-direction: column;
+      text-align: center;
+    }
+    
+    .profile-avatar {
+      margin: 0 auto;
+    }
+    
+    .profile-meta {
+      justify-content: center;
+    }
+    
+    .profile-actions {
+      margin-top: 20px;
+      align-items: center;
+    }
+    
+    .tab-header {
+      flex-direction: column;
+      gap: 15px;
+      align-items: flex-start;
+    }
+    
+    .tabs-header {
+      overflow-x: auto;
+      white-space: nowrap;
+      padding-bottom: 5px;
+    }
+    
+    .bid-card {
+      flex-direction: column;
+    }
+    
+    .bid-image {
+      width: 100%;
+      height: 150px;
+    }
+  }

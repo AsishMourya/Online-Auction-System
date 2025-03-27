@@ -1,273 +1,261 @@
-/* HomePage.css */
-.homepage {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
 /* Hero Section */
 .hero {
-  background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url('https://picsum.photos/id/1/1200/600');
-  background-size: cover;
-  background-position: center;
-  color: white;
-  padding: 80px 20px;
-  text-align: center;
-}
-
-.hero-content {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.hero h1 {
-  font-size: 3rem;
-  margin-bottom: 20px;
-}
-
-.hero p {
-  font-size: 1.2rem;
-  margin-bottom: 30px;
-}
-
-.hero-buttons {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-}
-
-.btn {
-  display: inline-block;
-  padding: 12px 24px;
-  border-radius: 5px;
-  font-weight: bold;
-  text-decoration: none;
-  transition: all 0.3s ease;
-}
-
-.btn-primary {
-  background-color: #4a90e2;
-  color: white;
-}
-
-.btn-primary:hover {
-  background-color: #357ac1;
-}
-
-.btn-secondary {
-  background-color: transparent;
-  border: 2px solid white;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.btn-outline {
-  background-color: transparent;
-  border: 1px solid #4a90e2;
-  color: #4a90e2;
-}
-
-.btn-outline:hover {
-  background-color: #4a90e2;
-  color: white;
-}
-
-/* Container */
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-/* Section Styling */
-section {
-  padding: 60px 0;
-}
-
-section h2 {
-  text-align: center;
-  font-size: 2rem;
-  margin-bottom: 40px;
-  color: #333;
-}
-
-/* Featured Auctions */
-.auction-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 30px;
-  margin-bottom: 30px;
-}
-
-.auction-card {
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease;
-}
-
-.auction-card:hover {
-  transform: translateY(-5px);
-}
-
-.auction-image {
-  height: 200px;
-  overflow: hidden;
-}
-
-.auction-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.auction-details {
-  padding: 20px;
-}
-
-.auction-details h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  color: #333;
-}
-
-.current-bid {
-  font-weight: bold;
-  color: #4a90e2;
-  margin-bottom: 5px;
-}
-
-.time-remaining {
-  font-size: 0.9rem;
-  color: #777;
-  margin-bottom: 15px;
-}
-
-.view-all-container {
-  text-align: center;
-  margin-top: 20px;
-}
-
-.view-all {
-  color: #4a90e2;
-  text-decoration: none;
-  font-weight: bold;
-}
-
-.view-all:hover {
-  text-decoration: underline;
-}
-
-/* Categories Section */
-.categories-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 20px;
-}
-
-.category-card {
-  text-align: center;
-  background-color: #f9f9f9;
-  border-radius: 10px;
-  padding: 30px 20px;
-  text-decoration: none;
-  color: #333;
-  transition: all 0.3s ease;
-}
-
-.category-card:hover {
-  background-color: #4a90e2;
-  color: white;
-  transform: translateY(-5px);
-}
-
-.category-icon {
-  font-size: 2.5rem;
-  margin-bottom: 10px;
-}
-
-.category-card h3 {
-  margin: 0;
-}
-
-/* How It Works Section */
-.steps-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 30px;
-}
-
-.step {
-  text-align: center;
-  padding: 20px;
-}
-
-.step-number {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background-color: #4a90e2;
-  color: white;
-  font-size: 1.5rem;
-  margin: 0 auto 20px;
-}
-
-/* Testimonials Section */
-.testimonials-section {
-  background-color: #f5f8fc;
-}
-
-.testimonials-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 30px;
-}
-
-.testimonial {
-  background-color: white;
-  border-radius: 10px;
-  padding: 30px;
-  box-shadow: 0 3px 15px rgba(0, 0, 0, 0.05);
-}
-
-.testimonial p {
-  font-style: italic;
-  margin-top: 0;
-}
-
-.user {
-  margin-top: 20px;
-}
-
-/* CTA Section */
-.cta-section {
-  background-color: #4a90e2;
-  color: white;
-  text-align: center;
-}
-
-.cta-section h2 {
-  color: white;
-}
-
-/* Responsive Styling */
-@media (max-width: 768px) {
+    background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url('https://picsum.photos/id/1/1200/600');
+    background-size: cover;
+    background-position: center;
+    color: white;
+    padding: 80px 20px;
+    text-align: center;
+  }
+  
+  .hero-content {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  
   .hero h1 {
-    font-size: 2.2rem;
+    font-size: 3rem;
+    margin-bottom: 20px;
+  }
+  
+  .hero p {
+    font-size: 1.2rem;
+    margin-bottom: 30px;
   }
   
   .hero-buttons {
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
+    display: flex;
+    gap: 20px;
+    justify-content: center;
   }
   
-  .how-it-works .steps-container,
-  .testimonials-container {
-    grid-template-columns: 1fr;
+  /* Featured Auctions */
+  .featured-section {
+    padding: 60px 0;
   }
-}
+  
+  .featured-section h2 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 40px;
+  }
+  
+  .auction-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 30px;
+    margin-bottom: 30px;
+  }
+  
+  .auction-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+  }
+  
+  .auction-card:hover {
+    transform: translateY(-5px);
+  }
+  
+  .auction-image {
+    height: 200px;
+    overflow: hidden;
+  }
+  
+  .auction-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .auction-details {
+    padding: 20px;
+  }
+  
+  .auction-details h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+  }
+  
+  .current-bid {
+    font-weight: bold;
+    color: #4a90e2;
+    margin-bottom: 5px;
+  }
+  
+  .time-remaining {
+    font-size: 0.9rem;
+    color: #777;
+    margin-bottom: 15px;
+  }
+  
+  .view-all-container {
+    text-align: center;
+    margin-top: 20px;
+  }
+  
+  .view-all {
+    color: #4a90e2;
+    text-decoration: none;
+    font-weight: bold;
+  }
+  
+  .view-all:hover {
+    text-decoration: underline;
+  }
+  
+  /* Categories Section */
+  .categories-section {
+    padding: 60px 0;
+    background-color: #f5f8fc;
+  }
+  
+  .categories-section h2 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 40px;
+  }
+  
+  .categories-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+  }
+  
+  .category-card {
+    text-align: center;
+    background-color: white;
+    border-radius: 10px;
+    padding: 30px 20px;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.3s ease;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+  }
+  
+  .category-card:hover {
+    background-color: #4a90e2;
+    color: white;
+    transform: translateY(-5px);
+  }
+  
+  .category-icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+  }
+  
+  .category-card h3 {
+    margin: 0;
+  }
+  
+  /* How It Works Section */
+  .how-it-works {
+    padding: 60px 0;
+  }
+  
+  .how-it-works h2 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 40px;
+  }
+  
+  .steps-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 30px;
+  }
+  
+  .step {
+    text-align: center;
+    padding: 20px;
+  }
+  
+  .step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: #4a90e2;
+    color: white;
+    font-size: 1.5rem;
+    margin: 0 auto 20px;
+  }
+  
+  /* Testimonials Section */
+  .testimonials-section {
+    padding: 60px 0;
+    background-color: #f5f8fc;
+  }
+  
+  .testimonials-section h2 {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 40px;
+  }
+  
+  .testimonials-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+  }
+  
+  .testimonial {
+    background-color: white;
+    border-radius: 10px;
+    padding: 30px;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.05);
+  }
+  
+  .testimonial p {
+    font-style: italic;
+    margin-top: 0;
+  }
+  
+  .user {
+    margin-top: 20px;
+  }
+  
+  /* CTA Section */
+  .cta-section {
+    padding: 60px 0;
+    background-color: #4a90e2;
+    color: white;
+    text-align: center;
+  }
+  
+  .cta-section h2 {
+    color: white;
+    font-size: 2rem;
+    margin-bottom: 20px;
+  }
+  
+  .cta-section p {
+    margin-bottom: 30px;
+    font-size: 1.1rem;
+  }
+  
+  /* Responsive Styling */
+  @media (max-width: 768px) {
+    .hero h1 {
+      font-size: 2.2rem;
+    }
+    
+    .hero p {
+      font-size: 1rem;
+    }
+    
+    .hero-buttons {
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .how-it-works .steps-container,
+    .testimonials-container {
+      grid-template-columns: 1fr;
+    }
+  }
