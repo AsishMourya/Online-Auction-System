@@ -16,10 +16,10 @@ const ProfilePage = () => {
   // Check if user is logged in
   useEffect(() => {
     const checkAuth = () => {
-      const token = localStorage.getItem('userToken');
+      const token = localStorage.getItem('token');
       
       if (!token) {
-        navigate('/login');
+        navigate('/login?redirect=/profile');
         return;
       }
       
@@ -28,150 +28,161 @@ const ProfilePage = () => {
     };
     
     checkAuth();
+    
+    // Add event listener to respond to authentication changes
+    window.addEventListener('authStateChanged', checkAuth);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('authStateChanged', checkAuth);
+    };
   }, [navigate]);
   
   const fetchUserData = async () => {
     try {
-      // In a real app, fetch user profile from API
-      // const response = await axios.get('/api/users/profile');
-      // setUser(response.data);
+      const userData = JSON.parse(localStorage.getItem('user'));
       
-      // Mock user data
-      const mockUser = {
-        id: 1001,
-        name: 'John Smith',
-        email: 'john.smith@example.com',
-        avatar: 'https://picsum.photos/id/64/200/200',
-        address: '123 Main St, New York, NY 10001',
-        phone: '(555) 123-4567',
-        rating: 4.7,
-        joinedDate: '2021-06-15',
-        bio: 'Passionate collector of vintage items and antiques. Always looking for unique pieces to add to my collection.'
-      };
+      if (userData) {
+        setUser({
+          id: userData.id || 1001,
+          name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'User',
+          email: userData.email || 'user@example.com',
+          avatar: userData.avatar || 'https://picsum.photos/id/64/200/200',
+          address: userData.address || '123 Main St, New York, NY 10001',
+          phone: userData.phone || '(555) 123-4567',
+          rating: userData.rating || 4.7,
+          joinedDate: userData.signup_datetime || '2021-06-15',
+          bio: userData.bio || 'Passionate collector of vintage items and antiques.'
+        });
+        
+        // Mock listings data
+        const mockListings = [
+          {
+            id: 101,
+            title: 'Vintage Camera',
+            currentBid: 250,
+            image: 'https://picsum.photos/id/36/300/200',
+            endsAt: new Date(Date.now() + 172800000).toISOString(),
+            status: 'active',
+            bidCount: 5
+          },
+          {
+            id: 102,
+            title: 'Antique Chair',
+            currentBid: 400,
+            image: 'https://picsum.photos/id/42/300/200',
+            endsAt: new Date(Date.now() - 86400000).toISOString(),
+            status: 'ended',
+            bidCount: 8
+          },
+          {
+            id: 103,
+            title: 'Rare Book Collection',
+            currentBid: 180,
+            image: 'https://picsum.photos/id/24/300/200',
+            endsAt: new Date(Date.now() + 432000000).toISOString(),
+            status: 'active',
+            bidCount: 3
+          }
+        ];
+        
+        // Mock bids data
+        const mockBids = [
+          {
+            id: 201,
+            auctionId: 301,
+            auctionTitle: 'Vintage Watch Collection',
+            bidAmount: 1200,
+            bidTime: new Date(Date.now() - 3600000).toISOString(),
+            auctionImage: 'https://picsum.photos/id/28/300/200',
+            endsAt: new Date(Date.now() + 86400000).toISOString(),
+            currentBid: 1250,
+            status: 'outbid'
+          },
+          {
+            id: 202,
+            auctionId: 302,
+            auctionTitle: 'Gaming Console Bundle',
+            bidAmount: 450,
+            bidTime: new Date(Date.now() - 172800000).toISOString(),
+            auctionImage: 'https://picsum.photos/id/96/300/200',
+            endsAt: new Date(Date.now() + 172800000).toISOString(),
+            currentBid: 450,
+            status: 'winning'
+          },
+          {
+            id: 203,
+            auctionId: 303,
+            auctionTitle: 'Collectible Action Figures',
+            bidAmount: 120,
+            bidTime: new Date(Date.now() - 259200000).toISOString(),
+            auctionImage: 'https://picsum.photos/id/20/300/200',
+            endsAt: new Date(Date.now() - 86400000).toISOString(),
+            currentBid: 150,
+            status: 'lost'
+          }
+        ];
+        
+        // Mock won auctions
+        const mockWonAuctions = [
+          {
+            id: 401,
+            title: 'Antique Pocket Watch',
+            finalBid: 560,
+            image: 'https://picsum.photos/id/27/300/200',
+            endedAt: new Date(Date.now() - 604800000).toISOString(),
+            paymentStatus: 'completed',
+            shippingStatus: 'delivered'
+          },
+          {
+            id: 402,
+            title: 'Vinyl Record Collection',
+            finalBid: 320,
+            image: 'https://picsum.photos/id/145/300/200',
+            endedAt: new Date(Date.now() - 1209600000).toISOString(),
+            paymentStatus: 'completed',
+            shippingStatus: 'shipped'
+          }
+        ];
+        
+        // Mock watchlist
+        const mockWatchlist = [
+          {
+            id: 501,
+            title: 'Rare Coin Set',
+            currentBid: 780,
+            image: 'https://picsum.photos/id/30/300/200',
+            endsAt: new Date(Date.now() + 345600000).toISOString(),
+            bidCount: 12
+          },
+          {
+            id: 502,
+            title: 'Vintage Turntable',
+            currentBid: 290,
+            image: 'https://picsum.photos/id/146/300/200',
+            endsAt: new Date(Date.now() + 172800000).toISOString(),
+            bidCount: 7
+          },
+          {
+            id: 503,
+            title: 'Art Deco Lamp',
+            currentBid: 150,
+            image: 'https://picsum.photos/id/129/300/200',
+            endsAt: new Date(Date.now() + 86400000).toISOString(),
+            bidCount: 4
+          }
+        ];
+        
+        setMyListings(mockListings);
+        setMyBids(mockBids);
+        setWonAuctions(mockWonAuctions);
+        setWatchlist(mockWatchlist);
+      } else {
+        console.error('No user data found in localStorage');
+        navigate('/login?redirect=/profile');
+        return;
+      }
       
-      // Mock listings data
-      const mockListings = [
-        {
-          id: 101,
-          title: 'Vintage Camera',
-          currentBid: 250,
-          image: 'https://picsum.photos/id/36/300/200',
-          endsAt: new Date(Date.now() + 172800000).toISOString(),
-          status: 'active',
-          bidCount: 5
-        },
-        {
-          id: 102,
-          title: 'Antique Chair',
-          currentBid: 400,
-          image: 'https://picsum.photos/id/42/300/200',
-          endsAt: new Date(Date.now() - 86400000).toISOString(),
-          status: 'ended',
-          bidCount: 8
-        },
-        {
-          id: 103,
-          title: 'Rare Book Collection',
-          currentBid: 180,
-          image: 'https://picsum.photos/id/24/300/200',
-          endsAt: new Date(Date.now() + 432000000).toISOString(),
-          status: 'active',
-          bidCount: 3
-        }
-      ];
-      
-      // Mock bids data
-      const mockBids = [
-        {
-          id: 201,
-          auctionId: 301,
-          auctionTitle: 'Vintage Watch Collection',
-          bidAmount: 1200,
-          bidTime: new Date(Date.now() - 3600000).toISOString(),
-          auctionImage: 'https://picsum.photos/id/28/300/200',
-          endsAt: new Date(Date.now() + 86400000).toISOString(),
-          currentBid: 1250,
-          status: 'outbid'
-        },
-        {
-          id: 202,
-          auctionId: 302,
-          auctionTitle: 'Gaming Console Bundle',
-          bidAmount: 450,
-          bidTime: new Date(Date.now() - 172800000).toISOString(),
-          auctionImage: 'https://picsum.photos/id/96/300/200',
-          endsAt: new Date(Date.now() + 172800000).toISOString(),
-          currentBid: 450,
-          status: 'winning'
-        },
-        {
-          id: 203,
-          auctionId: 303,
-          auctionTitle: 'Collectible Action Figures',
-          bidAmount: 120,
-          bidTime: new Date(Date.now() - 259200000).toISOString(),
-          auctionImage: 'https://picsum.photos/id/20/300/200',
-          endsAt: new Date(Date.now() - 86400000).toISOString(),
-          currentBid: 150,
-          status: 'lost'
-        }
-      ];
-      
-      // Mock won auctions
-      const mockWonAuctions = [
-        {
-          id: 401,
-          title: 'Antique Pocket Watch',
-          finalBid: 560,
-          image: 'https://picsum.photos/id/27/300/200',
-          endedAt: new Date(Date.now() - 604800000).toISOString(),
-          paymentStatus: 'completed',
-          shippingStatus: 'delivered'
-        },
-        {
-          id: 402,
-          title: 'Vinyl Record Collection',
-          finalBid: 320,
-          image: 'https://picsum.photos/id/145/300/200',
-          endedAt: new Date(Date.now() - 1209600000).toISOString(),
-          paymentStatus: 'completed',
-          shippingStatus: 'shipped'
-        }
-      ];
-      
-      // Mock watchlist
-      const mockWatchlist = [
-        {
-          id: 501,
-          title: 'Rare Coin Set',
-          currentBid: 780,
-          image: 'https://picsum.photos/id/30/300/200',
-          endsAt: new Date(Date.now() + 345600000).toISOString(),
-          bidCount: 12
-        },
-        {
-          id: 502,
-          title: 'Vintage Turntable',
-          currentBid: 290,
-          image: 'https://picsum.photos/id/146/300/200',
-          endsAt: new Date(Date.now() + 172800000).toISOString(),
-          bidCount: 7
-        },
-        {
-          id: 503,
-          title: 'Art Deco Lamp',
-          currentBid: 150,
-          image: 'https://picsum.photos/id/129/300/200',
-          endsAt: new Date(Date.now() + 86400000).toISOString(),
-          bidCount: 4
-        }
-      ];
-      
-      setUser(mockUser);
-      setMyListings(mockListings);
-      setMyBids(mockBids);
-      setWonAuctions(mockWonAuctions);
-      setWatchlist(mockWatchlist);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -180,7 +191,12 @@ const ProfilePage = () => {
   };
   
   const handleLogout = () => {
-    localStorage.removeItem('userToken');
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    
+    window.dispatchEvent(new Event('authStateChanged'));
+    
     navigate('/login');
   };
   

@@ -123,6 +123,15 @@
     border-color: #4a90e2;
   }
   
+  .form-row {
+    display: flex;
+    gap: 15px;
+  }
+  
+  .form-group.half {
+    flex: 1;
+  }
+  
   /* Responsive styles */
   @media (max-width: 768px) {
     .auth-container {

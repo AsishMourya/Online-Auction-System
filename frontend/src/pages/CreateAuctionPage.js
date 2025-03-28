@@ -26,6 +26,7 @@ const CreateAuctionPage = () => {
   const [previewImages, setPreviewImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   
   // For image preview
   const handleImageChange = (e) => {
@@ -111,6 +112,7 @@ const CreateAuctionPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
     
     // Validation
@@ -140,6 +142,9 @@ const CreateAuctionPage = () => {
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + parseInt(formData.duration));
       
+      // Add current date as start_time
+      const startDate = new Date();
+      
       // Add text fields
       auctionData.append('title', formData.title);
       auctionData.append('description', formData.description);
@@ -148,8 +153,39 @@ const CreateAuctionPage = () => {
       auctionData.append('min_bid_increment', formData.min_bid_increment);
       auctionData.append('condition', formData.condition);
       auctionData.append('location', formData.location);
+      auctionData.append('start_time', startDate.toISOString());
       auctionData.append('end_time', endDate.toISOString());
       auctionData.append('return_policy', formData.return_policy);
+      
+      // Build a more comprehensive item_data object
+      const itemData = {
+        condition: formData.condition,
+        location: formData.location || "Not specified",
+        description: formData.description,
+        return_policy: formData.return_policy || "No returns accepted",
+        shipping_options: formData.shipping_options,
+        payment_methods: formData.payment_methods,
+        // Add any other fields your backend might expect
+      };
+
+      // Make sure to stringify it properly
+      const itemDataString = JSON.stringify(itemData);
+      auctionData.append('item_data', itemDataString);
+
+      // Add this debugging code right after appending item_data
+      console.log('item_data JSON being sent:', itemDataString);
+      
+      // Send item_data_json as an alternative field name your API might be looking for
+      auctionData.append('item_data_json', itemDataString);
+      
+      // Some APIs expect nested fields instead of a JSON string
+      for (const [key, value] of Object.entries(itemData)) {
+        if (typeof value !== 'object') {
+          auctionData.append(`item_data.${key}`, value);
+        } else {
+          auctionData.append(`item_data.${key}`, JSON.stringify(value));
+        }
+      }
       
       // Add JSON fields
       auctionData.append('shipping_options', JSON.stringify(formData.shipping_options));
@@ -164,9 +200,21 @@ const CreateAuctionPage = () => {
       const token = localStorage.getItem('token');
       
       if (!token) {
-        navigate('/login?redirect=create-auction');
+        setError('Authentication required. You will be redirected to login.');
+        setTimeout(() => navigate('/login?redirect=/create-auction'), 1500);
+        setLoading(false);
         return;
       }
+      
+      // Debug logging for form data
+      console.log('Sending auction data to API:', {
+        title: formData.title,
+        category_id: formData.category_id,
+        starting_price: formData.starting_price,
+        image_count: formData.images.length,
+        shipping_options: formData.shipping_options.length,
+        payment_methods: formData.payment_methods
+      });
       
       // Call API
       const response = await axios.post(`${API_URL}/api/v1/auctions/auctions/`, auctionData, {
@@ -178,28 +226,85 @@ const CreateAuctionPage = () => {
       
       console.log('Auction created successfully', response.data);
       
-      // Redirect to the new auction page
-      navigate(`/auction/${response.data.data.id}`);
+      // Show success message
+      setSuccessMessage('Auction created successfully! Redirecting...');
+      
+      // Wait a moment to show the success message
+      setTimeout(() => {
+        // Redirect to the new auction page
+        if (response.data?.data?.id) {
+          navigate(`/auction/${response.data.data.id}`);
+        } else {
+          console.warn('Auction created but no ID returned. Redirecting to profile.');
+          navigate('/profile');
+        }
+      }, 1500);
       
     } catch (error) {
       console.error('Error creating auction:', error);
       
       // Handle different types of errors
       if (error.response) {
-        // The request was made and the server responded with a status code outside of 2xx
+        // Detailed error logging
+        console.error('Error response status:', error.response.status);
+        console.error('Error response data:', error.response.data);
+        
+        // Handle different status codes
         if (error.response.status === 401) {
-          setError('You must be logged in to create an auction');
-          navigate('/login?redirect=create-auction');
-        } else if (error.response.data && error.response.data.message) {
-          setError(error.response.data.message);
-        } else {
-          setError('Failed to create auction. Please try again.');
+          setError('Your session has expired. Please login again.');
+          
+          // Clear the token
+          localStorage.removeItem('token');
+          
+          // Dispatch authentication event to notify other components
+          window.dispatchEvent(new Event('authStateChanged'));
+          
+          setTimeout(() => {
+            navigate('/login?redirect=/create-auction');
+          }, 1500);
+        } 
+        else if (error.response.status === 403) {
+          setError('Permission denied: You do not have permission to create auctions');
         }
-      } else if (error.request) {
+        else if (error.response.status === 400) {
+          // Extract validation errors from the response
+          if (error.response.data?.errors) {
+            // Format field-specific errors from API
+            const errorMessages = [];
+            Object.entries(error.response.data.errors).forEach(([field, errors]) => {
+              if (Array.isArray(errors)) {
+                errorMessages.push(`${field}: ${errors.join(' ')}`);
+              } else if (typeof errors === 'string') {
+                errorMessages.push(`${field}: ${errors}`);
+              }
+            });
+            
+            if (errorMessages.length > 0) {
+              setError(errorMessages.join('. '));
+            } else {
+              setError(error.response.data.message || 'Validation error');
+            }
+          } else if (error.response.data?.message) {
+            setError(error.response.data.message);
+          } else {
+            setError('Invalid input data. Please check your form and try again.');
+          }
+        }
+        else if (error.response.status === 500) {
+          setError('Server error: The server encountered an issue. Please try again later.');
+        }
+        else {
+          setError(`Error ${error.response.status}: ${error.response.data?.message || 'Failed to create auction.'}`);
+        }
+      } 
+      else if (error.request) {
         // The request was made but no response was received
+        console.error('No response received:', error.request);
         setError('No response from server. Please check your internet connection and try again.');
-      } else {
+      } 
+      else {
         // Something happened in setting up the request
+        console.error('Error message:', error.message);
         setError('Failed to create auction. Please try again.');
       }
       
@@ -211,8 +316,25 @@ const CreateAuctionPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        // Real API call to fetch categories
-        const response = await axios.get(`${API_URL}/api/v1/auctions/categories/all/`);
+        // Get the token for authentication
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+          console.error('No auth token found');
+          navigate('/login?redirect=/create-auction');
+          return;
+        }
+        
+        console.log('Using token for categories API call:', token.substring(0, 10) + '...');
+        
+        // Make authenticated API call
+        const response = await axios.get(`${API_URL}/api/v1/auctions/categories/all/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('Categories API response:', response.data);
         
         // Check if data exists and has the expected structure
         if (response.data && response.data.data && response.data.data.categories) {
@@ -230,6 +352,20 @@ const CreateAuctionPage = () => {
         }
       } catch (error) {
         console.error('Error fetching categories:', error);
+        
+        // Add specific handling for auth errors
+        if (error.response && error.response.status === 401) {
+          console.error('Authentication failed. Token may be invalid or expired.');
+          
+          // Clear the invalid token
+          localStorage.removeItem('token');
+          window.dispatchEvent(new Event('authStateChanged'));
+          
+          // Redirect to login
+          navigate('/login?redirect=/create-auction');
+          return;
+        }
+        
         // Use mock data as fallback
         setCategories([
           { id: 1, name: 'Electronics' },
@@ -250,7 +386,7 @@ const CreateAuctionPage = () => {
     const token = localStorage.getItem('token');
     if (!token) {
       // Redirect to login with return URL
-      navigate('/login?redirect=create-auction');
+      navigate('/login?redirect=/create-auction');
       return;
     }
     
@@ -263,6 +399,7 @@ const CreateAuctionPage = () => {
         <h1>Create New Auction</h1>
         
         {error && <div className="error-message">{error}</div>}
+        {successMessage && <div className="success-message">{successMessage}</div>}
         
         <form onSubmit={handleSubmit} className="auction-form">
           <div className="form-section">

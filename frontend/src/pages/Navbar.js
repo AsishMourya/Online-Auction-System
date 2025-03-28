@@ -5,17 +5,61 @@ import '../styles/Navbar.css';
 const Navbar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [username, setUsername] = useState('');
   const navigate = useNavigate();
 
-  // Check login status - replace with your actual auth logic
+  // Check login status whenever the component mounts or token changes
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    setIsLoggedIn(!!token);
+    const checkAuthStatus = () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        setIsLoggedIn(true);
+        
+        // Get username from stored user data if available
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          try {
+            const user = JSON.parse(userData);
+            setUsername(user.username || 'User');
+          } catch (e) {
+            console.error('Error parsing user data', e);
+            setUsername('User');
+          }
+        }
+      } else {
+        setIsLoggedIn(false);
+        setUsername('');
+      }
+    };
+
+    checkAuthStatus();
+    
+    // Add event listener for storage changes (in case another tab logs out)
+    window.addEventListener('storage', checkAuthStatus);
+    
+    // Create a custom event listener for auth state changes
+    window.addEventListener('authStateChanged', checkAuthStatus);
+    
+    return () => {
+      window.removeEventListener('storage', checkAuthStatus);
+      window.removeEventListener('authStateChanged', checkAuthStatus);
+    };
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('authToken');
+    // Clear all auth-related data
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    
+    // Update auth state
     setIsLoggedIn(false);
+    setUsername('');
+    
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event('authStateChanged'));
+    
+    // Redirect to home
     navigate('/');
   };
 
@@ -31,6 +75,7 @@ const Navbar = () => {
         </div>
         
         <ul className={menuOpen ? 'nav-menu active' : 'nav-menu'}>
+          {/* Removed Home link since logo serves the same purpose */}
           <li className="nav-item">
             <Link to="/auctions" className="nav-link" onClick={() => setMenuOpen(false)}>
               Auctions
@@ -45,9 +90,7 @@ const Navbar = () => {
                 </Link>
               </li>
               <li className="nav-item">
-                <Link to="/profile" className="nav-link" onClick={() => setMenuOpen(false)}>
-                  My Profile
-                </Link>
+                <Link to="/profile" className="nav-link">Profile</Link>
               </li>
               <li className="nav-item">
                 <button className="nav-link logout-btn" onClick={handleLogout}>
@@ -60,6 +103,11 @@ const Navbar = () => {
               <li className="nav-item">
                 <Link to="/login" className="nav-link" onClick={() => setMenuOpen(false)}>
                   Login
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link to="/register" className="nav-link" onClick={() => setMenuOpen(false)}>
+                  Register
                 </Link>
               </li>
             </>

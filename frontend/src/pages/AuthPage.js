@@ -18,7 +18,9 @@ const AuthPage = () => {
     username: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    first_name: '',  // Added for backend requirement
+    last_name: ''    // Added for backend requirement
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -92,16 +94,12 @@ const AuthPage = () => {
         if (response.data?.data?.access) {
           // Store tokens in localStorage
           localStorage.setItem('token', response.data.data.access);
-          
-          if (response.data.data.refresh) {
-            localStorage.setItem('refreshToken', response.data.data.refresh);
-          }
-          
-          // Store user information if available
-          if (response.data.data.user) {
-            localStorage.setItem('user', JSON.stringify(response.data.data.user));
-          }
-          
+          localStorage.setItem('refreshToken', response.data.data.refresh);
+          localStorage.setItem('user', JSON.stringify(response.data.data.user));
+
+          // Dispatch event to notify other components about the auth state change
+          window.dispatchEvent(new Event('authStateChanged'));
+
           console.log('Login successful');
           navigate(redirect);
         } else if (response.data?.success === false) {
@@ -118,7 +116,10 @@ const AuthPage = () => {
         const registerData = {
           username: formData.username,
           email: formData.email,
-          password: formData.password
+          password: formData.password,
+          confirm_password: formData.confirmPassword,  // Match backend field name
+          first_name: formData.first_name,
+          last_name: formData.last_name
         };
         
         console.log('Register data:', registerData);
@@ -138,15 +139,12 @@ const AuthPage = () => {
           // If tokens are returned immediately after registration
           if (response.data.data?.access) {
             localStorage.setItem('token', response.data.data.access);
-            
-            if (response.data.data.refresh) {
-              localStorage.setItem('refreshToken', response.data.data.refresh);
-            }
-            
-            if (response.data.data.user) {
-              localStorage.setItem('user', JSON.stringify(response.data.data.user));
-            }
-            
+            localStorage.setItem('refreshToken', response.data.data.refresh);
+            localStorage.setItem('user', JSON.stringify(response.data.data.user));
+
+            // Dispatch event to notify other components about the auth state change
+            window.dispatchEvent(new Event('authStateChanged'));
+
             navigate(redirect);
           } else {
             // If not immediately logged in, redirect to login
@@ -270,17 +268,45 @@ const AuthPage = () => {
           
           <form onSubmit={handleSubmit}>
             {!isLogin && (
-              <div className="form-group">
-                <label htmlFor="username">Username</label>
-                <input
-                  type="text"
-                  id="username"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  required={!isLogin}
-                />
-              </div>
+              <>
+                <div className="form-group">
+                  <label htmlFor="username">Username</label>
+                  <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+                
+                <div className="form-row">
+                  <div className="form-group half">
+                    <label htmlFor="first_name">First Name</label>
+                    <input
+                      type="text"
+                      id="first_name"
+                      name="first_name"
+                      value={formData.first_name}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="form-group half">
+                    <label htmlFor="last_name">Last Name</label>
+                    <input
+                      type="text"
+                      id="last_name"
+                      name="last_name"
+                      value={formData.last_name}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+                </div>
+              </>
             )}
             
             <div className="form-group">
@@ -316,7 +342,7 @@ const AuthPage = () => {
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  required={!isLogin}
+                  required
                 />
               </div>
             )}
