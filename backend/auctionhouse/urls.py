@@ -32,7 +32,6 @@ urlpatterns = api_url_patterns + [
     path("admin/", admin.site.urls),
 ]
 
-
 urlpatterns += [
     path(
         "swagger/",

@@ -65,6 +65,41 @@
   display: none;
 }
 
+/* Update the wallet balance styling */
+.wallet-balance {
+  display: flex;
+  align-items: center;
+  background-color: #2c3e50; /* Dark blue background */
+  border-radius: 4px;
+  padding: 5px 10px;
+  margin: 0 10px;
+  color: white; /* White text */
+  font-size: 0.9rem; /* Normal font size */
+}
+
+.wallet-icon {
+  margin-right: 5px;
+  font-size: 1rem; /* Slightly smaller icon */
+}
+
+.balance-amount {
+  font-weight: 500;
+  color: white; /* Ensure the amount text is white */
+  font-size: 0.9rem; /* Match the rest of the text */
+}
+
+/* On hover effect */
+.wallet-balance:hover {
+  background-color: #34495e; /* Slightly darker blue on hover */
+}
+
+.nav-notifications {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Adjust positioning for mobile */
 @media screen and (max-width: 960px) {
   .nav-menu {
     display: flex;
@@ -104,5 +139,19 @@
     font-size: 1.8rem;
     cursor: pointer;
     color: #fff;
+  }
+
+  .wallet-balance {
+    width: auto;
+    justify-content: center;
+    margin: 10px 0;
+    padding: 5px 10px;
+    font-size: 0.9rem;
+  }
+  
+  .nav-notifications {
+    width: 100%;
+    justify-content: center;
+    margin: 10px 0;
   }
 }

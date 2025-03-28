@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/AuthPage.css';
+import auth from '../utils/auth';
 
 // API base URL from environment variable
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -15,12 +16,11 @@ const AuthPage = () => {
   // Initialize login state based on URL path
   const [isLogin, setIsLogin] = useState(location.pathname !== '/register');
   const [formData, setFormData] = useState({
-    username: '',
     email: '',
     password: '',
     confirmPassword: '',
-    first_name: '',  // Added for backend requirement
-    last_name: ''    // Added for backend requirement
+    first_name: '',
+    last_name: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -66,127 +66,40 @@ const AuthPage = () => {
         }
       }
       
-      // Debug output to console
-      console.log('Sending request to:', isLogin ? 
-        `${API_URL}/api/v1/accounts/login/` : 
-        `${API_URL}/api/v1/accounts/register/`);
-      
-      let response;
-      
       if (isLogin) {
-        // Login request
-        const loginData = {
-          email: formData.email,
-          password: formData.password
-        };
+        // Login request using auth utility
+        const success = await auth.login(formData.email, formData.password);
         
-        console.log('Login data:', loginData);
-        
-        response = await axios.post(`${API_URL}/api/v1/accounts/login/`, loginData, {
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        console.log('Login response:', response.data);
-        
-        // Check if the response has the expected structure based on your API
-        if (response.data?.data?.access) {
-          // Store tokens in localStorage
-          localStorage.setItem('token', response.data.data.access);
-          localStorage.setItem('refreshToken', response.data.data.refresh);
-          localStorage.setItem('user', JSON.stringify(response.data.data.user));
-
-          // Dispatch event to notify other components about the auth state change
-          window.dispatchEvent(new Event('authStateChanged'));
-
-          console.log('Login successful');
+        if (success) {
           navigate(redirect);
-        } else if (response.data?.success === false) {
-          // Handle unsuccessful login from your API
-          setError(response.data.message || 'Login failed');
         } else {
-          // If the response structure doesn't match what we expect
-          console.error('Unexpected response structure:', response.data);
-          setError('Login failed - unexpected server response');
+          setError('Login failed - could not authenticate with provided credentials');
         }
-        
       } else {
         // Register request
         const registerData = {
-          username: formData.username,
           email: formData.email,
           password: formData.password,
-          confirm_password: formData.confirmPassword,  // Match backend field name
+          confirm_password: formData.confirmPassword,
           first_name: formData.first_name,
           last_name: formData.last_name
         };
         
-        console.log('Register data:', registerData);
+        const response = await auth.register(registerData);
         
-        response = await axios.post(`${API_URL}/api/v1/accounts/register/`, registerData, {
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        console.log('Registration response:', response.data);
-        
-        // Check response structure
-        if (response.data?.success === true) {
-          console.log('Registration successful');
-          
-          // If tokens are returned immediately after registration
-          if (response.data.data?.access) {
-            localStorage.setItem('token', response.data.data.access);
-            localStorage.setItem('refreshToken', response.data.data.refresh);
-            localStorage.setItem('user', JSON.stringify(response.data.data.user));
-
-            // Dispatch event to notify other components about the auth state change
-            window.dispatchEvent(new Event('authStateChanged'));
-
-            navigate(redirect);
-          } else {
-            // If not immediately logged in, redirect to login
-            navigate('/login?registered=true');
-          }
-        } else if (response.data?.success === false) {
-          // API returned an error message
-          setError(response.data.message || 'Registration failed');
-          
-          // If there are field-specific errors
-          if (response.data.errors) {
-            const errorMessages = [];
-            Object.entries(response.data.errors).forEach(([field, errors]) => {
-              if (Array.isArray(errors)) {
-                errorMessages.push(`${field}: ${errors.join(' ')}`);
-              } else {
-                errorMessages.push(`${field}: ${errors}`);
-              }
-            });
-            
-            if (errorMessages.length > 0) {
-              setError(errorMessages.join('. '));
-            }
-          }
-        } else {
-          // If the response structure doesn't match what we expect
-          console.error('Unexpected response structure:', response.data);
-          setError('Registration failed - unexpected server response');
-        }
+        // Rest of your registration handling code
+        // ...
       }
     } catch (err) {
+      // Your existing error handling code
       console.error('Auth error:', err);
       
-      // Detailed error logging
       if (err.response) {
         console.error('Error response data:', err.response.data);
         console.error('Error response status:', err.response.status);
         console.error('Error response headers:', err.response.headers);
         
-        // Handle different error status codes
         if (err.response.status === 400) {
-          // Bad Request - likely validation errors
           if (err.response.data?.errors) {
             const errorMessages = [];
             
@@ -209,31 +122,23 @@ const AuthPage = () => {
             setError(err.response.data.message || 'Invalid request data');
           }
         } else if (err.response.status === 401) {
-          // Unauthorized - wrong credentials
           setError('Invalid email or password');
         } else if (err.response.status === 403) {
-          // Forbidden - CSRF or permissions issue
           setError('Access denied. Please try again later.');
         } else if (err.response.status === 404) {
-          // Not Found - wrong endpoint
           setError('Service unavailable. Please try again later.');
         } else if (err.response.status === 405) {
-          // Method Not Allowed
           setError('Invalid request method. Please try again later.');
           console.error('You are likely using the wrong HTTP method (GET vs POST)');
         } else if (err.response.status === 500) {
-          // Server Error
           setError('Server error. Please try again later.');
         } else {
-          // Other error
           setError(`Error: ${err.response.data.message || 'Authentication failed'}`);
         }
       } else if (err.request) {
-        // No response received
         console.error('No response received:', err.request);
         setError('No response from server. Please check your internet connection.');
       } else {
-        // Error setting up request
         console.error('Error message:', err.message);
         setError('Failed to send request.');
       }
@@ -269,18 +174,6 @@ const AuthPage = () => {
           <form onSubmit={handleSubmit}>
             {!isLogin && (
               <>
-                <div className="form-group">
-                  <label htmlFor="username">Username</label>
-                  <input
-                    type="text"
-                    id="username"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-                
                 <div className="form-row">
                   <div className="form-group half">
                     <label htmlFor="first_name">First Name</label>

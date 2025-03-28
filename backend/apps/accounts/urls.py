@@ -11,6 +11,9 @@ from .views import (
     UserRegistrationView,
     logout_view,
     WalletViewSet,
+    debug_auth,
+    verify_token,
+    delete_account,
 )
 from .admin_views import (
     AdminUserManagementViewSet,
@@ -38,6 +41,7 @@ urlpatterns = [
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path("register/", UserRegistrationView.as_view(), name="register"),
     path("logout/", logout_view, name="logout"),
+    path("verify-token/", verify_token, name="verify-token"),
     path("", include(router.urls)),
     path("admin/", include(admin_router.urls)),
     path("admin/dashboard/", admin_dashboard, name="admin-dashboard"),
@@ -55,4 +59,6 @@ urlpatterns = [
         user_payment_methods,
         name="admin-user-payment-methods",
     ),
+    path("debug-auth/", debug_auth, name="debug-auth"),
+    path("delete-account/", delete_account, name="delete-account"),
 ]

@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from .models import Auction, Category, Bid
 from .serializers import AuctionSerializer, CategorySerializer, BidSerializer
 
@@ -32,39 +33,78 @@ def featured_auctions(request):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def place_bid(request, auction_id):
+def place_bid(request, auction_id=None):
+    """
+    Place a bid on an auction
+    """
     try:
-        auction = Auction.objects.get(id=auction_id, status='active')
-        amount = float(request.data.get('amount', 0))
+        # Handle both URL and data-based auction_id
+        if auction_id:
+            auction = get_object_or_404(Auction, id=auction_id)
+        else:
+            auction_id = request.data.get('auction_id')
+            if not auction_id:
+                return Response(
+                    {"success": False, "message": "Auction ID is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            auction = get_object_or_404(Auction, id=auction_id)
         
-        # Validate bid amount
-        if amount <= auction.current_bid:
+        # Check if auction is still active
+        if auction.has_ended:
             return Response(
-                {"error": f"Bid must be higher than current bid (${auction.current_bid})"},
+                {"success": False, "message": "This auction has ended"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Create bid
-        bid = Bid(
+        # Get amount from request data
+        amount = request.data.get('amount')
+        if not amount:
+            return Response(
+                {"success": False, "message": "Bid amount is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            amount = float(amount)
+        except (ValueError, TypeError):
+            return Response(
+                {"success": False, "message": "Invalid bid amount"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Check if amount is greater than current price + min increment
+        min_valid_bid = auction.current_price + auction.min_bid_increment
+        if amount < min_valid_bid:
+            return Response(
+                {
+                    "success": False, 
+                    "message": f"Bid must be at least ${min_valid_bid}"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Create the bid
+        bid = Bid.objects.create(
             auction=auction,
             bidder=request.user,
             amount=amount
         )
-        bid.save()
         
-        # Update auction current bid
-        auction.current_bid = amount
-        auction.save()
+        # The save method of Bid will update the auction's current price
         
-        return Response({"message": "Bid placed successfully"}, status=status.HTTP_201_CREATED)
-    
-    except Auction.DoesNotExist:
+        serializer = BidSerializer(bid)
         return Response(
-            {"error": "Auction not found or has ended"},
-            status=status.HTTP_404_NOT_FOUND
+            {
+                "success": True,
+                "message": "Bid placed successfully",
+                "data": serializer.data
+            },
+            status=status.HTTP_201_CREATED
         )
+        
     except Exception as e:
         return Response(
-            {"error": str(e)},
-            status=status.HTTP_400_BAD_REQUEST
+            {"success": False, "message": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

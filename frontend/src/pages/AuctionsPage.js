@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/AuctionsPage.css';
 
 const AuctionsPage = () => {
+  const { categoryId } = useParams();
+  const location = useLocation();
+
   const [auctions, setAuctions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -13,13 +16,14 @@ const AuctionsPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
 
   useEffect(() => {
+    if (categoryId) {
+      setSelectedCategory(categoryId);
+    }
+  }, [categoryId, location.pathname]);
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
-        // In a real app, you would make API calls based on filters
-        // const response = await axios.get(`/api/auctions?filter=${filter}&sort=${sort}&search=${searchTerm}&category=${selectedCategory}`);
-        // setAuctions(response.data);
-        
-        // For now, we'll use mock data
         const mockAuctions = [
           { 
             id: 1, 
@@ -89,7 +93,6 @@ const AuctionsPage = () => {
           },
         ];
         
-        // Mock categories
         const mockCategories = [
           { id: 1, name: 'Electronics', icon: '💻' },
           { id: 2, name: 'Collectibles', icon: '🏆' },
@@ -100,13 +103,11 @@ const AuctionsPage = () => {
         
         setCategories(mockCategories);
         
-        // Filter by category if selected
         let filtered = mockAuctions;
         if (selectedCategory) {
           filtered = mockAuctions.filter(auction => auction.categoryId === parseInt(selectedCategory));
         }
         
-        // Filter by search term
         if (searchTerm) {
           filtered = filtered.filter(auction => 
             auction.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -114,7 +115,6 @@ const AuctionsPage = () => {
           );
         }
         
-        // Sort the auctions
         if (sort === 'endingSoon') {
           filtered.sort((a, b) => new Date(a.endsAt) - new Date(b.endsAt));
         } else if (sort === 'priceLowHigh') {
@@ -136,7 +136,6 @@ const AuctionsPage = () => {
     fetchData();
   }, [filter, sort, searchTerm, selectedCategory]);
 
-  // Helper function to format time remaining
   const formatTimeRemaining = (endDateString) => {
     const endDate = new Date(endDateString);
     const now = new Date();
@@ -153,7 +152,12 @@ const AuctionsPage = () => {
   return (
     <div className="auctions-page">
       <div className="container">
-        <h1>Browse Auctions</h1>
+        <h1>
+          {selectedCategory 
+            ? `${categories.find(c => c.id === parseInt(selectedCategory))?.name || ''} Auctions` 
+            : 'Browse Auctions'
+          }
+        </h1>
         
         <div className="search-filter-container">
           <div className="search-bar">

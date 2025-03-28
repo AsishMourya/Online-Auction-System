@@ -6,8 +6,13 @@ import random
 import string
 from django.db import transaction
 
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+import jwt
+from django.conf import settings
 
 from apps.core.mixins import SwaggerSchemaMixin, ApiResponseMixin
 from apps.core.responses import api_response
@@ -34,47 +39,29 @@ from .serializers import (
 )
 
 
-class CustomTokenObtainPairView(ApiResponseMixin, TokenObtainPairView):
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+    Custom view for obtaining JWT token pair
+    """
     serializer_class = CustomTokenObtainPairSerializer
-
-    @swagger_auto_schema(
-        operation_summary="Obtain JWT tokens",
-        operation_description="Get access and refresh tokens by providing email and password",
-        responses={
-            200: CustomTokenObtainPairSerializer,
-            400: "Bad Request",
-            401: "Authentication Failed",
-        },
-        tags=["Authentication"],
-    )
+    
     def post(self, request, *args, **kwargs):
-        try:
-            serializer = self.get_serializer(data=request.data)
-
-            if not serializer.is_valid():
-                return api_response(
-                    success=False,
-                    message="Authentication failed",
-                    errors=serializer.errors,
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
-
-            response_data = serializer.validated_data
-
-            if request.data.get("email"):
-                user = User.objects.filter(email=request.data.get("email")).first()
-                if user:
-                    user.last_login_datetime = timezone.now()
-                    user.save(update_fields=["last_login_datetime"])
-
-            return api_response(data=response_data, message="Authentication successful")
-        except Exception as e:
-            return api_response(
-                success=False,
-                message="Authentication failed",
-                errors={"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        response = super().post(request, *args, **kwargs)
+        
+        # Log the token being returned (first 20 chars only)
+        if 'access' in response.data:
+            access_preview = response.data['access'][:20] + '...' if response.data['access'] else 'None'
+            print(f"Generated access token: {access_preview}")
+        
+        # Wrap with success wrapper if needed
+        if hasattr(settings, 'USE_RESPONSE_WRAPPER') and settings.USE_RESPONSE_WRAPPER:
+            response.data = {
+                'success': True,
+                'data': response.data,
+                'message': 'Login successful'
+            }
+        
+        return response
 
 
 class CustomTokenRefreshView(ApiResponseMixin, TokenRefreshView):
@@ -616,3 +603,101 @@ def logout_view(request):
             errors={"detail": str(e)},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+@api_view(["DELETE"])
+@permission_classes([permissions.IsAuthenticated])
+@swagger_auto_schema(
+    operation_summary="Delete user account",
+    operation_description="Permanently delete the authenticated user's account",
+    responses={200: "Account deleted successfully"},
+    tags=["Account Management"],
+)
+def delete_account(request):
+    """Delete the authenticated user's account"""
+    try:
+        user = request.user
+        
+        # Delete user objects like auctions, bids, etc.
+        # This depends on your model relationships and CASCADE settings
+        
+        # Finally delete the user
+        user.delete()
+        
+        return api_response(message="Account deleted successfully")
+    except Exception as e:
+        return api_response(
+            success=False,
+            message="Failed to delete account",
+            errors={"detail": str(e)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])  # Allow anyone to access this endpoint for debugging
+def debug_auth(request):
+    """Debug endpoint to inspect authentication details without requiring valid auth"""
+    # Get all headers for debugging
+    auth_header = request.META.get('HTTP_AUTHORIZATION', 'Not found')
+    headers = {k: v for k, v in request.META.items() if k.startswith('HTTP_')}
+    
+    # Try to decode the token
+    token_info = None
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        try:
+            # Try to decode the token without verification (for debug only)
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            token_info = {
+                'decoded': decoded,
+                'format_valid': True
+            }
+        except Exception as e:
+            token_info = {
+                'error': str(e),
+                'format_valid': False
+            }
+    
+    return Response({
+        'is_authenticated': request.user.is_authenticated,
+        'user': str(request.user),
+        'auth_header': auth_header,
+        'token_info': token_info,
+        'all_headers': headers,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_token(request):
+    """Verify if a token is valid and return its contents"""
+    token = request.data.get('token')
+    
+    if not token:
+        return Response({
+            'valid': False,
+            'error': 'No token provided'
+        }, status=400)
+    
+    try:
+        # Try to parse the token
+        access_token = AccessToken(token)
+        
+        # If successful, return the token contents
+        return Response({
+            'valid': True,
+            'token_type': 'access',
+            'payload': access_token.payload,
+            'user_id': access_token.get('user_id')
+        })
+    except TokenError as e:
+        return Response({
+            'valid': False,
+            'error': str(e)
+        }, status=400)
+    except Exception as e:
+        return Response({
+            'valid': False,
+            'error': f"Unexpected error: {str(e)}"
+        }, status=400)

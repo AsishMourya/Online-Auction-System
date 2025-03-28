@@ -103,6 +103,10 @@ class Auction(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
     starting_price = models.DecimalField(max_digits=12, decimal_places=2)
+    min_bid_increment = models.DecimalField(
+        max_digits=12, decimal_places=2, default=1.00,
+        help_text=_("Minimum increment amount for bids")
+    )
     reserve_price = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True
     )
@@ -290,16 +294,16 @@ class Bid(models.Model):
             .first()
         )
 
-        min_bid = highest_bid.amount if highest_bid else self.auction.starting_price
-        if self.amount <= min_bid:
+        min_bid = highest_bid.amount + self.auction.min_bid_increment if highest_bid else self.auction.starting_price
+        if self.amount < min_bid:
             if highest_bid:
                 errors["amount"] = _(
-                    "Bid must be higher than the current highest bid of %(amount)s"
-                ) % {"amount": min_bid}
+                    "Bid must be at least %(min_bid)s higher than the current highest bid of %(amount)s"
+                ) % {"min_bid": self.auction.min_bid_increment, "amount": highest_bid.amount}
             else:
                 errors["amount"] = _(
-                    "Bid must be higher than the starting price of %(amount)s"
-                ) % {"amount": min_bid}
+                    "Bid must be at least %(min_bid)s higher than the starting price of %(amount)s"
+                ) % {"min_bid": self.auction.min_bid_increment, "amount": self.auction.starting_price}
 
         if errors:
             raise ValidationError(errors)

@@ -5,53 +5,46 @@ from .views import (
     CategoryViewSet,
     AuctionViewSet,
     BidViewSet,
+    AutoBidViewSet,
     search_auctions,
     auction_stats,
     search_items,
     list_all_categories,
-    AutoBidViewSet,
+    test_auth,
+    create_auction  # Your actual function-based view
 )
-
-from .admin_views import (
-    AdminAuctionViewSet,
-    AdminBidViewSet,
-    admin_auction_dashboard,
-    admin_export_auctions,
-    admin_export_bids,
-    admin_verify_auction,
-    admin_hide_auction,
-)
+from . import api  # Import the api module with the place_bid function
 
 router = DefaultRouter()
-router.register(r"categories", CategoryViewSet, basename="category")
-router.register(r"auctions", AuctionViewSet, basename="auction")
-router.register(r"bids", BidViewSet, basename="bid")
-router.register(r"autobids", AutoBidViewSet, basename="autobid")
-
-admin_router = DefaultRouter()
-admin_router.register(r"auctions", AdminAuctionViewSet, basename="admin-auction")
-admin_router.register(r"bids", AdminBidViewSet, basename="admin-bid")
+router.register(r'categories', CategoryViewSet, basename='category')
+router.register(r'auctions', AuctionViewSet, basename='auction')
+router.register(r'bids', BidViewSet, basename='bid')
+router.register(r'autobids', AutoBidViewSet, basename='autobid')
 
 urlpatterns = [
-    # Standard API endpoints
-    path("", include(router.urls)),
-    path("search/", search_auctions, name="search-auctions"),
-    path("search/items/", search_items, name="search-items"),
-    path("categories/all/", list_all_categories, name="list-all-categories"),
-    path("auctions/<uuid:auction_id>/stats/", auction_stats, name="auction-stats"),
-    # Admin API endpoints
-    path("admin/", include(admin_router.urls)),
-    path("admin/dashboard/", admin_auction_dashboard, name="admin-auction-dashboard"),
-    path("admin/auctions/export/", admin_export_auctions, name="admin-export-auctions"),
-    path("admin/bids/export/", admin_export_bids, name="admin-export-bids"),
-    path(
-        "admin/auctions/<uuid:auction_id>/verify/",
-        admin_verify_auction,
-        name="admin-verify-auction",
-    ),
-    path(
-        "admin/auctions/<uuid:auction_id>/hide/",
-        admin_hide_auction,
-        name="admin-hide-auction",
-    ),
+    path('', include(router.urls)),
+    path('search/', search_auctions, name='search-auctions'),
+    path('auctions/<uuid:auction_id>/stats/', auction_stats, name='auction-stats'),
+    path('items/search/', search_items, name='search-items'),
+    path('categories/all/', list_all_categories, name='list-all-categories'),
+    path('test-auth/', test_auth, name='test-auth'),
+    # Use your function-based view for auction creation
+    path('create-auction/', create_auction, name='create-auction'),
+
+    # Add these new endpoints for bids:
+    # Using the singular 'bid' endpoint (what your frontend is currently trying to use)
+    path('auctions/<uuid:auction_id>/bid/', api.place_bid, name='place-bid'),
+
+    # Alternative plural 'bids' endpoint for RESTful consistency
+    path('auctions/<uuid:auction_id>/bids/', BidViewSet.as_view({
+        'get': 'list',
+        'post': 'create'
+    }), name='auction-bids'),
+
+    # General bid creation endpoint
+    path('bids/', api.place_bid, name='create-bid'),
+
+    # Add these for bids:
+    path('bids/', api.place_bid, name='place-bid'),  # General bid endpoint
+    path('auctions/<uuid:auction_id>/bid/', api.place_bid, name='auction-specific-bid'),  # Auction-specific endpoint
 ]

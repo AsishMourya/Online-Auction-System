@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -23,6 +24,7 @@ from .serializers import (
     ItemSerializer,
     AuctionSerializer,
     BidSerializer,
+    AuctionCreateSerializer  # Add this import
 )
 
 
@@ -514,135 +516,22 @@ class AuctionViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet
         )
 
 
-class BidViewSet(ApiResponseMixin, viewsets.ModelViewSet):
-    """API endpoints for auction bids"""
-
+class BidViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing bids"""
     serializer_class = BidSerializer
     permission_classes = [permissions.IsAuthenticated]
-
+    
     def get_queryset(self):
-        """Return all bids for auctions the user has bid on, or all bids for user's auctions"""
-        user = self.request.user
-
-        if self.action == "list":
-            queryset = Bid.objects.filter(bidder=user)
-
-            auction_id = self.request.query_params.get("auction")
-            if auction_id:
-                auction = get_object_or_404(Auction, id=auction_id)
-
-                if user == auction.seller or user.role == "admin":
-                    return Bid.objects.filter(auction=auction)
-                else:
-                    return Bid.objects.filter(auction=auction, bidder=user)
-
-            return queryset
-
-        return Bid.objects.all()
-
-    def get_permissions(self):
-        """Only allow read access to bids"""
-        if self.action in ["update", "partial_update", "destroy"]:
-            self.permission_classes = [permissions.IsAuthenticated, IsAdmin]
-        return super().get_permissions()
-
-    @swagger_auto_schema(
-        operation_id="list_bids",
-        operation_summary="List bids",
-        operation_description="Get bids placed by current user or all bids for an auction if user is seller",
-        tags=["Bids"],
-        responses={200: BidSerializer(many=True)},
-    )
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return api_response(data=serializer.data, message="Bids retrieved successfully")
-
-    @swagger_auto_schema(
-        operation_id="create_bid",
-        operation_summary="Place bid",
-        operation_description="Place a new bid on an auction",
-        tags=["Bids"],
-        responses={201: BidSerializer},
-    )
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-
-        if serializer.is_valid():
-            with transaction.atomic():
-                bid = serializer.save()
-
-                auction = bid.auction
-
-                Bid.objects.filter(auction=auction, status=Bid.STATUS_ACTIVE).exclude(
-                    id=bid.id
-                ).update(status=Bid.STATUS_OUTBID)
-
-                if auction.buy_now_price and bid.amount >= auction.buy_now_price:
-                    auction.status = Auction.STATUS_SOLD
-                    auction.save()
-
-                    bid.status = Bid.STATUS_WON
-                    bid.save()
-
-                    auction.bids.exclude(id=bid.id).update(status=Bid.STATUS_LOST)
-
-            return api_response(
-                data=serializer.data,
-                message="Bid placed successfully",
-                status=status.HTTP_201_CREATED,
-            )
-        return api_response(
-            success=False,
-            message="Failed to place bid",
-            errors=serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    @swagger_auto_schema(
-        operation_id="retrieve_bid",
-        operation_summary="Get bid details",
-        operation_description="Get details for a specific bid",
-        tags=["Bids"],
-        responses={200: BidSerializer},
-    )
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return api_response(
-            data=serializer.data, message="Bid details retrieved successfully"
-        )
-
-    @swagger_auto_schema(
-        operation_id="get_my_bids",
-        operation_summary="Get my bids",
-        operation_description="Get all bids placed by current user",
-        tags=["Bids"],
-        responses={200: BidSerializer(many=True)},
-    )
-    @action(detail=False, methods=["get"])
-    def my_bids(self, request):
-        user = request.user
-        queryset = Bid.objects.filter(bidder=user)
-
-        status_filter = request.query_params.get("status")
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return api_response(
-            data=serializer.data, message="Your bids retrieved successfully"
-        )
+        """Filter bids by auction_id if provided"""
+        queryset = Bid.objects.all()
+        auction_id = self.request.query_params.get('auction_id')
+        if auction_id:
+            queryset = queryset.filter(auction_id=auction_id)
+        return queryset
+        
+    def perform_create(self, serializer):
+        """Set the bidder to the current user"""
+        serializer.save(bidder=self.request.user)
 
 
 @api_view(["GET"])
@@ -922,3 +811,56 @@ class AutoBidViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet
         return api_response(
             data=serializer.data, message="AutoBid activated successfully"
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def test_auth(request):
+    """Simple endpoint to test if authentication is working"""
+    return Response({
+        'success': True,
+        'message': 'Authentication successful',
+        'user_id': request.user.id,
+        'username': request.user.username
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_auction(request):
+    try:
+        # Debug logging
+        print(f"Creating auction. User: {request.user.id}")
+        print(f"Request data: {request.data}")
+        
+        # Process the request and create auction
+        serializer = AuctionCreateSerializer(data=request.data, context={'request': request})
+        
+        if serializer.is_valid():
+            auction = serializer.save(seller=request.user)
+            
+            # Success response
+            return Response({
+                'success': True,
+                'message': 'Auction created successfully',
+                'data': AuctionSerializer(auction).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            # Validation error response
+            print(f"Validation errors: {serializer.errors}")
+            return Response({
+                'success': False,
+                'message': 'Validation error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        # Unexpected error
+        print(f"Error creating auction: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        return Response({
+            'success': False,
+            'message': 'Error',
+            'detail': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

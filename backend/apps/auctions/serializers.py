@@ -63,20 +63,26 @@ class BidSerializer(serializers.ModelSerializer):
     bidder_id = serializers.UUIDField(read_only=True)
     bidder_details = UserProfileBasicSerializer(source="bidder", read_only=True)
     auction_title = serializers.CharField(source="auction.title", read_only=True)
+    bidder_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Bid
         fields = [
             "id",
             "auction",
+            "bidder",
             "bidder_id",
             "bidder_details",
+            "bidder_name",
             "auction_title",
             "amount",
             "timestamp",
             "status",
         ]
-        read_only_fields = ["id", "bidder_id", "timestamp", "status"]
+        read_only_fields = ["id", "bidder", "bidder_id", "timestamp", "status"]
+
+    def get_bidder_name(self, obj):
+        return f"{obj.bidder.first_name} {obj.bidder.last_name}"
 
     def validate(self, data):
         user = self.context["request"].user
@@ -88,15 +94,24 @@ class BidSerializer(serializers.ModelSerializer):
         if not auction.is_active():
             raise serializers.ValidationError("This auction is not active.")
 
+        if auction.has_ended:
+            raise serializers.ValidationError("This auction has ended")
+
         amount = data.get("amount")
         highest_bid = (
             auction.bids.filter(status=Bid.STATUS_ACTIVE).order_by("-amount").first()
         )
         min_bid = highest_bid.amount if highest_bid else auction.starting_price
+        min_valid_bid = auction.current_price + auction.min_bid_increment
 
         if amount <= min_bid:
             raise serializers.ValidationError(
                 f"Bid must be higher than the current highest bid of {min_bid}."
+            )
+
+        if amount < min_valid_bid:
+            raise serializers.ValidationError(
+                f"Bid must be at least ${min_valid_bid}"
             )
 
         from apps.accounts.models import Wallet
@@ -297,3 +312,59 @@ class AuctionWatchSerializer(serializers.ModelSerializer):
         user = self.context["request"].user
         validated_data["user"] = user
         return super().create(validated_data)
+
+
+class AuctionCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating auctions with item data"""
+    
+    item_data = serializers.JSONField()
+    
+    # Add these fields with write_only=True since they're not in the model
+    category_id = serializers.IntegerField(write_only=True)
+    duration = serializers.IntegerField(write_only=True, required=False, default=7)
+    
+    class Meta:
+        model = Auction
+        fields = [
+            'title', 'description', 'starting_price', 'min_bid_increment',
+            'category_id', 'duration', 'item_data', 'start_time', 
+            'end_time', 'auction_type'
+        ]
+        
+    def create(self, validated_data):
+        # Handle fields not on the model
+        item_data = validated_data.pop('item_data', {})
+        category_id = validated_data.pop('category_id', None)
+        duration = validated_data.pop('duration', 7)
+        
+        # Handle start/end times
+        if 'start_time' not in validated_data:
+            validated_data['start_time'] = timezone.now()
+            
+        if 'end_time' not in validated_data:
+            validated_data['end_time'] = validated_data['start_time'] + timezone.timedelta(days=duration)
+        
+        # Create the auction
+        auction = Auction.objects.create(
+            seller=validated_data.get('seller'),
+            title=validated_data.get('title'),
+            description=validated_data.get('description'),
+            starting_price=validated_data.get('starting_price'),
+            min_bid_increment=validated_data.get('min_bid_increment'),
+            start_time=validated_data.get('start_time'),
+            end_time=validated_data.get('end_time'),
+            auction_type=validated_data.get('auction_type', 'standard')
+        )
+        
+        # Create the item
+        item = Item.objects.create(
+            name=auction.title,
+            description=auction.description,
+            owner=auction.seller,
+            condition=item_data.get('condition', 'new'),
+            location=item_data.get('location', ''),
+            category_id=category_id,  # This uses the category_id we extracted earlier
+            auction=auction
+        )
+        
+        return auction

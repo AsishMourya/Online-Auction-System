@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/CreateAuctionPage.css';
+import { FaBell, FaEnvelope } from 'react-icons/fa';
 
 // API base URL from environment variable
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -13,20 +14,30 @@ const CreateAuctionPage = () => {
     description: '',
     category_id: '',
     starting_price: '',
-    min_bid_increment: '',
+    min_bid_increment: '10.00',
     duration: '7',
     condition: 'new',
     location: '',
     images: [],
-    shipping_options: [{ method: 'Standard Shipping', cost: '' }],
+    shipping_options: [{ method: 'Standard Shipping', cost: '15.00' }],
     payment_methods: ['Credit Card', 'PayPal'],
-    return_policy: ''
+    return_policy: 'Returns accepted within 7 days if item not as described',
+    auction_type: 'standard' // Add this line
   });
   const [categories, setCategories] = useState([]);
   const [previewImages, setPreviewImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    bid_notifications: true,
+    outbid_notifications: true,
+    auction_won_notifications: true,
+    auction_ended_notifications: true,
+    payment_notifications: true,
+    admin_notifications: true,
+    preferred_channels: ['email', 'in_app']
+  });
   
   // For image preview
   const handleImageChange = (e) => {
@@ -58,15 +69,15 @@ const CreateAuctionPage = () => {
   
   // Handle shipping option changes
   const handleShippingChange = (index, field, value) => {
-    const updatedShipping = [...formData.shipping_options];
-    updatedShipping[index] = {
-      ...updatedShipping[index],
+    const newShippingOptions = [...formData.shipping_options];
+    newShippingOptions[index] = {
+      ...newShippingOptions[index],
       [field]: value
     };
     
     setFormData({
       ...formData,
-      shipping_options: updatedShipping
+      shipping_options: newShippingOptions
     });
   };
   
@@ -83,12 +94,12 @@ const CreateAuctionPage = () => {
   
   // Remove a shipping option
   const removeShippingOption = (index) => {
-    const updatedShipping = [...formData.shipping_options];
-    updatedShipping.splice(index, 1);
+    const newShippingOptions = [...formData.shipping_options];
+    newShippingOptions.splice(index, 1);
     
     setFormData({
       ...formData,
-      shipping_options: updatedShipping
+      shipping_options: newShippingOptions
     });
   };
   
@@ -105,6 +116,28 @@ const CreateAuctionPage = () => {
     setFormData({
       ...formData,
       payment_methods: updatedPayments
+    });
+  };
+
+  const handleNotificationChange = (field) => {
+    setNotificationPreferences({
+      ...notificationPreferences,
+      [field]: !notificationPreferences[field]
+    });
+  };
+
+  const handleChannelChange = (channel, checked) => {
+    let updatedChannels;
+    
+    if (checked) {
+      updatedChannels = [...notificationPreferences.preferred_channels, channel];
+    } else {
+      updatedChannels = notificationPreferences.preferred_channels.filter(c => c !== channel);
+    }
+    
+    setNotificationPreferences({
+      ...notificationPreferences,
+      preferred_channels: updatedChannels
     });
   };
   
@@ -128,98 +161,67 @@ const CreateAuctionPage = () => {
       return;
     }
     
-    if (formData.images.length === 0) {
-      setError('Please upload at least one image');
+    // Move these variables outside try-catch so they're accessible everywhere
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      setError('Authentication required. You will be redirected to login.');
+      setTimeout(() => navigate('/login?redirect=/create-auction'), 1500);
       setLoading(false);
       return;
     }
     
+    // Calculate end date based on duration
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + parseInt(formData.duration));
+    
+    // Add current date as start_time
+    const startDate = new Date();
+    
+    // Add this special formatting for item_data - this is key
+    const item_data = {
+      name: formData.title, // Item name is required by ItemSerializer
+      description: formData.description,
+      condition: formData.condition,
+      location: formData.location || "Not specified",
+      shipping_options: formData.shipping_options,
+      payment_methods: formData.payment_methods,
+      return_policy: formData.return_policy || "No returns accepted",
+      category: formData.category_id // Category is needed for the item
+    };
+
     try {
       // Create form data for API
       const auctionData = new FormData();
       
-      // Calculate end date based on duration
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + parseInt(formData.duration));
-      
-      // Add current date as start_time
-      const startDate = new Date();
-      
-      // Add text fields
+      // Add basic fields
       auctionData.append('title', formData.title);
       auctionData.append('description', formData.description);
       auctionData.append('category_id', formData.category_id);
       auctionData.append('starting_price', formData.starting_price);
       auctionData.append('min_bid_increment', formData.min_bid_increment);
-      auctionData.append('condition', formData.condition);
-      auctionData.append('location', formData.location);
       auctionData.append('start_time', startDate.toISOString());
       auctionData.append('end_time', endDate.toISOString());
-      auctionData.append('return_policy', formData.return_policy);
+      auctionData.append('auction_type', formData.auction_type); // Add this line
       
-      // Build a more comprehensive item_data object
-      const itemData = {
-        condition: formData.condition,
-        location: formData.location || "Not specified",
-        description: formData.description,
-        return_policy: formData.return_policy || "No returns accepted",
-        shipping_options: formData.shipping_options,
-        payment_methods: formData.payment_methods,
-        // Add any other fields your backend might expect
-      };
+      auctionData.append('item_data', JSON.stringify(item_data));
 
-      // Make sure to stringify it properly
-      const itemDataString = JSON.stringify(itemData);
-      auctionData.append('item_data', itemDataString);
-
-      // Add this debugging code right after appending item_data
-      console.log('item_data JSON being sent:', itemDataString);
-      
-      // Send item_data_json as an alternative field name your API might be looking for
-      auctionData.append('item_data_json', itemDataString);
-      
-      // Some APIs expect nested fields instead of a JSON string
-      for (const [key, value] of Object.entries(itemData)) {
-        if (typeof value !== 'object') {
-          auctionData.append(`item_data.${key}`, value);
-        } else {
-          auctionData.append(`item_data.${key}`, JSON.stringify(value));
-        }
+      // Debug logs
+      console.log('FormData contents:');
+      for (let [key, value] of auctionData.entries()) {
+        console.log(`${key}: ${typeof value === 'object' ? 'File or Object' : value}`);
       }
       
-      // Add JSON fields
-      auctionData.append('shipping_options', JSON.stringify(formData.shipping_options));
-      auctionData.append('payment_methods', JSON.stringify(formData.payment_methods));
-      
-      // Add image files
-      formData.images.forEach((image, index) => {
-        auctionData.append(`images[${index}]`, image);
-      });
-      
-      // Get the authentication token
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        setError('Authentication required. You will be redirected to login.');
-        setTimeout(() => navigate('/login?redirect=/create-auction'), 1500);
-        setLoading(false);
-        return;
+      // Add image files only if there are any
+      if (formData.images.length > 0) {
+        formData.images.forEach((image, index) => {
+          auctionData.append('image', image);
+        });
       }
-      
-      // Debug logging for form data
-      console.log('Sending auction data to API:', {
-        title: formData.title,
-        category_id: formData.category_id,
-        starting_price: formData.starting_price,
-        image_count: formData.images.length,
-        shipping_options: formData.shipping_options.length,
-        payment_methods: formData.payment_methods
-      });
       
       // Call API
       const response = await axios.post(`${API_URL}/api/v1/auctions/auctions/`, auctionData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`
         }
       });
@@ -234,43 +236,46 @@ const CreateAuctionPage = () => {
         // Redirect to the new auction page
         if (response.data?.data?.id) {
           navigate(`/auction/${response.data.data.id}`);
+        } else if (response.data?.id) {
+          navigate(`/auction/${response.data.id}`);
         } else {
           console.warn('Auction created but no ID returned. Redirecting to profile.');
           navigate('/profile');
         }
       }, 1500);
+
+      try {
+        const prefResponse = await axios.put(`${API_URL}/api/v1/notifications/preferences/`, notificationPreferences, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log('Notification preferences updated successfully', prefResponse.data);
+      } catch (notificationError) {
+        console.error('Failed to update notification preferences:', notificationError);
+        // Don't show error to user since auction was created successfully
+      }
       
     } catch (error) {
       console.error('Error creating auction:', error);
       
       // Handle different types of errors
       if (error.response) {
-        // Detailed error logging
-        console.error('Error response status:', error.response.status);
-        console.error('Error response data:', error.response.data);
+        console.error('Error status:', error.response.status);
+        console.error('Error data:', error.response.data);
         
-        // Handle different status codes
         if (error.response.status === 401) {
           setError('Your session has expired. Please login again.');
-          
-          // Clear the token
           localStorage.removeItem('token');
-          
-          // Dispatch authentication event to notify other components
-          window.dispatchEvent(new Event('authStateChanged'));
-          
           setTimeout(() => {
             navigate('/login?redirect=/create-auction');
           }, 1500);
         } 
-        else if (error.response.status === 403) {
-          setError('Permission denied: You do not have permission to create auctions');
-        }
         else if (error.response.status === 400) {
-          // Extract validation errors from the response
+          // Format field-specific errors
+          const errorMessages = [];
           if (error.response.data?.errors) {
-            // Format field-specific errors from API
-            const errorMessages = [];
             Object.entries(error.response.data.errors).forEach(([field, errors]) => {
               if (Array.isArray(errors)) {
                 errorMessages.push(`${field}: ${errors.join(' ')}`);
@@ -278,34 +283,82 @@ const CreateAuctionPage = () => {
                 errorMessages.push(`${field}: ${errors}`);
               }
             });
-            
-            if (errorMessages.length > 0) {
-              setError(errorMessages.join('. '));
-            } else {
-              setError(error.response.data.message || 'Validation error');
-            }
-          } else if (error.response.data?.message) {
-            setError(error.response.data.message);
-          } else {
-            setError('Invalid input data. Please check your form and try again.');
           }
-        }
-        else if (error.response.status === 500) {
-          setError('Server error: The server encountered an issue. Please try again later.');
+          
+          if (errorMessages.length > 0) {
+            setError(errorMessages.join('. '));
+          } else {
+            setError(error.response.data?.message || 'Validation error');
+          }
         }
         else {
           setError(`Error ${error.response.status}: ${error.response.data?.message || 'Failed to create auction.'}`);
         }
       } 
       else if (error.request) {
-        // The request was made but no response was received
-        console.error('No response received:', error.request);
-        setError('No response from server. Please check your internet connection and try again.');
+        setError('No response from server. Please check your internet connection.');
       } 
       else {
-        // Something happened in setting up the request
-        console.error('Error message:', error.message);
         setError('Failed to create auction. Please try again.');
+      }
+      
+      // Now this section will have access to startDate, endDate, itemData, and token
+      if (error.response && error.response.data?.errors?.item_data) {
+        console.log('First attempt failed. Trying alternative format...');
+        
+        // Try a direct JSON submission instead of FormData
+        const jsonPayload = {
+          title: formData.title,
+          description: formData.description,
+          category_id: parseInt(formData.category_id),
+          starting_price: parseFloat(formData.starting_price),
+          min_bid_increment: parseFloat(formData.min_bid_increment),
+          start_time: startDate.toISOString(),
+          end_time: endDate.toISOString(),
+          auction_type: formData.auction_type, // Add this line
+          item_data: item_data // Use the properly formatted item_data
+        };
+        
+        console.log('Sending direct JSON payload:', jsonPayload);
+        
+        try {
+          // This now has access to token
+          const response = await axios.post(`${API_URL}/api/v1/auctions/auctions/`, jsonPayload, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log('Alternative approach succeeded:', response.data);
+          // Add success handling for alternative approach
+          setSuccessMessage('Auction created successfully! Redirecting...');
+          
+          // Wait a moment to show the success message
+          setTimeout(() => {
+            // Redirect to the new auction page
+            if (response.data?.data?.id) {
+              navigate(`/auction/${response.data.data.id}`);
+            } else if (response.data?.id) {
+              navigate(`/auction/${response.data.id}`);
+            } else {
+              console.warn('Auction created but no ID returned. Redirecting to profile.');
+              navigate('/profile');
+            }
+          }, 1500);
+          
+          return; // Stop further error handling
+          
+        } catch (alternativeError) {
+          console.error('Alternative approach also failed:', alternativeError);
+          console.error('Alternative approach detailed error:', 
+            alternativeError.response?.data?.errors || 
+            alternativeError.response?.data?.detail || 
+            alternativeError.response?.data || 
+            alternativeError.message
+          );
+          // Continue with your existing error handling...
+        }
       }
       
       setLoading(false);
@@ -316,32 +369,19 @@ const CreateAuctionPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        // Get the token for authentication
         const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
         
-        if (!token) {
-          console.error('No auth token found');
-          navigate('/login?redirect=/create-auction');
-          return;
-        }
-        
-        console.log('Using token for categories API call:', token.substring(0, 10) + '...');
-        
-        // Make authenticated API call
-        const response = await axios.get(`${API_URL}/api/v1/auctions/categories/all/`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const response = await axios.get(`${API_URL}/api/v1/auctions/categories/`, {
+          headers
         });
         
-        console.log('Categories API response:', response.data);
-        
-        // Check if data exists and has the expected structure
-        if (response.data && response.data.data && response.data.data.categories) {
-          setCategories(response.data.data.categories);
+        if (response.data && response.data.data) {
+          setCategories(response.data.data);
+        } else if (Array.isArray(response.data)) {
+          setCategories(response.data);
         } else {
-          // Fallback to mock data if response format is unexpected
-          console.warn('Unexpected API response format. Using mock data.');
+          // Fallback to mock data
           setCategories([
             { id: 1, name: 'Electronics' },
             { id: 2, name: 'Collectibles' },
@@ -353,42 +393,16 @@ const CreateAuctionPage = () => {
       } catch (error) {
         console.error('Error fetching categories:', error);
         
-        // Add specific handling for auth errors
-        if (error.response && error.response.status === 401) {
-          console.error('Authentication failed. Token may be invalid or expired.');
-          
-          // Clear the invalid token
-          localStorage.removeItem('token');
-          window.dispatchEvent(new Event('authStateChanged'));
-          
-          // Redirect to login
-          navigate('/login?redirect=/create-auction');
-          return;
-        }
-        
         // Use mock data as fallback
         setCategories([
           { id: 1, name: 'Electronics' },
           { id: 2, name: 'Collectibles' },
           { id: 3, name: 'Fashion' },
           { id: 4, name: 'Home & Garden' },
-          { id: 5, name: 'Vehicles' },
-          { id: 6, name: 'Art' },
-          { id: 7, name: 'Jewelry & Watches' },
-          { id: 8, name: 'Books & Magazines' },
-          { id: 9, name: 'Sports Equipment' },
-          { id: 10, name: 'Toys & Hobbies' }
+          { id: 5, name: 'Vehicles' }
         ]);
       }
     };
-    
-    // Check if user is logged in
-    const token = localStorage.getItem('token');
-    if (!token) {
-      // Redirect to login with return URL
-      navigate('/login?redirect=/create-auction');
-      return;
-    }
     
     fetchCategories();
   }, [navigate]);
@@ -567,16 +581,19 @@ const CreateAuctionPage = () => {
             
             <div className="form-group">
               <label>Accepted Payment Methods</label>
-              {['Credit Card', 'PayPal', 'Bank Transfer', 'Cash on Delivery'].map(method => (
-                <div key={method}>
-                  <input
-                    type="checkbox"
-                    checked={formData.payment_methods.includes(method)}
-                    onChange={(e) => handlePaymentChange(method, e.target.checked)}
-                  />
-                  <label>{method}</label>
-                </div>
-              ))}
+              <div className="payment-methods">
+                {['Credit Card', 'PayPal', 'Bank Transfer', 'Cash on Delivery'].map(method => (
+                  <div key={method} className="payment-method-option">
+                    <input
+                      type="checkbox"
+                      id={`payment-${method}`}
+                      checked={formData.payment_methods.includes(method)}
+                      onChange={(e) => handlePaymentChange(method, e.target.checked)}
+                    />
+                    <label htmlFor={`payment-${method}`}>{method}</label>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           
@@ -584,19 +601,31 @@ const CreateAuctionPage = () => {
             <h2>Images</h2>
             
             <div className="form-group">
-              <label>Upload Images (Max 5)*</label>
-              <input 
-                type="file" 
-                multiple 
-                accept="image/*" 
-                onChange={handleImageChange} 
-                required={previewImages.length === 0}
-              />
-              <p className="form-hint">First image will be used as the main image</p>
-              <div className="image-preview">
-                {previewImages.map((src, index) => (
-                  <img key={index} src={src} alt={`Preview ${index}`} />
-                ))}
+              <label>Upload Images (Max 5)</label>
+              <div className="image-upload-container">
+                <div className="image-upload-box">
+                  <input 
+                    type="file" 
+                    id="images"
+                    multiple 
+                    accept="image/*" 
+                    onChange={handleImageChange}
+                    className="file-input" 
+                  />
+                  <label htmlFor="images" className="file-input-label">
+                    <span className="upload-icon">+</span>
+                    <span>Click to select images</span>
+                  </label>
+                </div>
+                <p className="form-hint">Images are optional. First image will be used as the main image if provided.</p>
+                
+                <div className="image-previews">
+                  {previewImages.map((src, index) => (
+                    <div key={index} className="image-preview">
+                      <img src={src} alt={`Preview ${index}`} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -612,9 +641,222 @@ const CreateAuctionPage = () => {
               placeholder="Describe your return policy (if any)"
             ></textarea>
           </div>
+
+          <div className="form-section">
+            <h2>Notification Preferences</h2>
+            <p className="form-hint">Choose when you want to receive notifications about this auction</p>
+            
+            <div className="notification-channels">
+              <h3>Notification Channels</h3>
+              <div className="channel-options">
+                <div className="channel-option">
+                  <input
+                    type="checkbox"
+                    id="channel-email"
+                    checked={notificationPreferences.preferred_channels.includes('email')}
+                    onChange={(e) => handleChannelChange('email', e.target.checked)}
+                  />
+                  <label htmlFor="channel-email">
+                    <FaEnvelope className="channel-icon" />
+                    Email Notifications
+                  </label>
+                </div>
+                <div className="channel-option">
+                  <input
+                    type="checkbox"
+                    id="channel-inapp"
+                    checked={notificationPreferences.preferred_channels.includes('in_app')}
+                    onChange={(e) => handleChannelChange('in_app', e.target.checked)}
+                  />
+                  <label htmlFor="channel-inapp">
+                    <FaBell className="channel-icon" />
+                    In-App Notifications
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            <div className="notification-types">
+              <h3>Notification Types</h3>
+              
+              <div className="notification-option">
+                <input
+                  type="checkbox"
+                  id="bid-notifications"
+                  checked={notificationPreferences.bid_notifications}
+                  onChange={() => handleNotificationChange('bid_notifications')}
+                />
+                <label htmlFor="bid-notifications">Bids placed on my auctions</label>
+              </div>
+              
+              <div className="notification-option">
+                <input
+                  type="checkbox"
+                  id="outbid-notifications"
+                  checked={notificationPreferences.outbid_notifications}
+                  onChange={() => handleNotificationChange('outbid_notifications')}
+                />
+                <label htmlFor="outbid-notifications">When I'm outbid on an auction</label>
+              </div>
+              
+              <div className="notification-option">
+                <input
+                  type="checkbox"
+                  id="auction-won-notifications"
+                  checked={notificationPreferences.auction_won_notifications}
+                  onChange={() => handleNotificationChange('auction_won_notifications')}
+                />
+                <label htmlFor="auction-won-notifications">When I win an auction</label>
+              </div>
+              
+              <div className="notification-option">
+                <input
+                  type="checkbox"
+                  id="auction-ended-notifications"
+                  checked={notificationPreferences.auction_ended_notifications}
+                  onChange={() => handleNotificationChange('auction_ended_notifications')}
+                />
+                <label htmlFor="auction-ended-notifications">When my auction ends</label>
+              </div>
+              
+              <div className="notification-option">
+                <input
+                  type="checkbox"
+                  id="payment-notifications"
+                  checked={notificationPreferences.payment_notifications}
+                  onChange={() => handleNotificationChange('payment_notifications')}
+                />
+                <label htmlFor="payment-notifications">Payment updates</label>
+              </div>
+            </div>
+          </div>
           
           <button type="submit" className="submit-button" disabled={loading}>
             {loading ? 'Submitting...' : 'Create Auction'}
+          </button>
+
+          {/* Replace your test button with this final diagnostic version */}
+          <button 
+            type="button" 
+            className="submit-button" 
+            style={{marginTop: '10px', backgroundColor: '#d43f3a'}}
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem('token');
+                
+                if (!token) {
+                  alert('Please login first');
+                  return;
+                }
+                
+                console.log('Running API diagnosis...');
+                
+                // 1. Test if API is reachable at all with a GET request
+                try {
+                  console.log('1. Testing API connectivity...');
+                  const connectivityTest = await axios.get(
+                    `${API_URL}/api/v1/auctions/auctions/`,
+                    {
+                      headers: {
+                        'Authorization': `Bearer ${token}`
+                      }
+                    }
+                  );
+                  console.log('API connection successful:', connectivityTest.status);
+                } catch (connectError) {
+                  console.error('API connectivity test failed:', connectError);
+                  alert('Cannot connect to API. Please check if backend server is running.');
+                  return;
+                }
+                
+                // 2. Try to create auction with minimal data and native fetch
+                console.log('2. Testing with browser fetch API...');
+                const minimalData = {
+                  title: "Minimal Test " + new Date().getTime(),
+                  description: "Testing with fetch API",
+                  category_id: categories[0]?.id || 1,
+                  starting_price: 100,
+                  min_bid_increment: 10,
+                  start_time: new Date().toISOString(),
+                  end_time: new Date(Date.now() + 86400000).toISOString(),
+                  item_data: {
+                    condition: "new"
+                  }
+                };
+                
+                try {
+                  const fetchResponse = await fetch(`${API_URL}/api/v1/auctions/auctions/`, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(minimalData)
+                  });
+                  
+                  const fetchData = await fetchResponse.json();
+                  
+                  if (fetchResponse.ok) {
+                    console.log('Fetch API succeeded:', fetchData);
+                    alert('Created auction using fetch! Check console.');
+                    return;
+                  } else {
+                    console.error('Fetch API failed:', fetchData);
+                    console.log('Status:', fetchResponse.status);
+                  }
+                } catch (fetchError) {
+                  console.error('Fetch execution error:', fetchError);
+                }
+                
+                // 3. Check backend version/info if available
+                try {
+                  console.log('3. Checking API information...');
+                  const infoResponse = await axios.get(
+                    `${API_URL}/api/v1/info/`,
+                    {
+                      headers: {
+                        'Authorization': `Bearer ${token}`
+                      }
+                    }
+                  );
+                  console.log('API info:', infoResponse.data);
+                } catch (infoError) {
+                  console.error('Could not get API info:', infoError);
+                }
+                
+                // 4. Try OPTIONS request to get allowed methods and requirements
+                try {
+                  console.log('4. Checking API options...');
+                  const optionsResponse = await axios.options(
+                    `${API_URL}/api/v1/auctions/auctions/`,
+                    {
+                      headers: {
+                        'Authorization': `Bearer ${token}`
+                      }
+                    }
+                  );
+                  console.log('API options:', optionsResponse.data);
+                  console.log('Allowed methods:', optionsResponse.headers?.allow);
+                } catch (optionsError) {
+                  console.error('Could not get API options:', optionsError);
+                }
+                
+                // 5. Final diagnostic information
+                console.log('\n--- DIAGNOSTIC INFORMATION ---');
+                console.log('API URL:', API_URL);
+                console.log('Browser:', navigator.userAgent);
+                console.log('React version:', React.version);
+                console.log('Axios version:', axios.VERSION || 'unknown');
+                
+                alert('Diagnosis complete. Please check console and send to backend developer.');
+                
+              } catch (error) {
+                console.error('Overall diagnosis error:', error);
+                alert('Diagnosis failed: ' + error.message);
+              }
+            }}
+          >
+            Run API Diagnosis
           </button>
         </form>
       </div>

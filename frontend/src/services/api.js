@@ -144,7 +144,8 @@ const apiService = {
   getNotificationPreferences: () => api.get('/api/v1/notifications/preferences/'),
   updateNotificationPreferences: (preferencesData) => api.put('/api/v1/notifications/preferences/', preferencesData),
   getTransactions: () => api.get('/api/v1/transactions/transactions/'),
-  getTransactionById: (id) => api.get(`/api/v1/transactions/transactions/${id}/`)
+  getTransactionById: (id) => api.get(`/api/v1/transactions/transactions/${id}/`),
+  deleteAccount: () => api.delete('/api/v1/accounts/delete-account/')
 };
 
 export default apiService;

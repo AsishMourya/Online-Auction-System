@@ -1,0 +1,83 @@
+.auto-bidding-container {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+  border: 1px solid #e0e0e0;
+}
+
+.auto-bidding-container h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.auto-bid-description {
+  margin-bottom: 20px;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.auto-bid-form .form-group {
+  margin-bottom: 15px;
+}
+
+.auto-bid-form label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.auto-bid-form input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.form-hint {
+  margin-top: 5px;
+  font-size: 0.8rem;
+  color: #777;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.success-message {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+.wallet-info {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+  font-size: 0.9rem;
+}
+
+.auto-bid-status {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 15px;
+}
+
+.auto-bid-actions {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+.auto-bid-actions button {
+  margin-right: 10px;
+}

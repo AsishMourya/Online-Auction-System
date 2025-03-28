@@ -180,10 +180,45 @@
   }
   
   .auction-ended {
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  
+  .winning-bid {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #2e7d32;
+    margin-bottom: 10px;
+  }
+  
+  .winner-info {
+    background-color: #e8f5e9;
+    border: 1px solid #c8e6c9;
     padding: 15px;
-    background-color: #f8d7da;
-    color: #721c24;
-    border-radius: 5px;
+    border-radius: 8px;
+    margin-top: 15px;
+  }
+  
+  .winner-badge {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #2e7d32;
+  }
+  
+  .seller-info-panel {
+    background-color: #e3f2fd;
+    border: 1px solid #bbdefb;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
+  }
+  
+  .seller-notice {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #1565c0;
   }
   
   .seller-info {

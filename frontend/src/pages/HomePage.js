@@ -6,12 +6,41 @@ import '../styles/HomePage.css';
 // Create an API base URL - in production, use environment variable
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-// Create a simple API service for this component
+// Update the API service with correct endpoints and enhanced error handling
 const api = {
-  getFeaturedAuctions: () => axios.get(`${API_URL}/api/v1/auctions/auctions/`, { 
-    params: { featured: true, limit: 3 } 
-  }),
-  getCategories: () => axios.get(`${API_URL}/api/v1/auctions/categories/all/`)
+  getFeaturedAuctions: () => {
+    const token = localStorage.getItem('token');
+    console.log('Token for featured auctions API call:', token ? 'Found' : 'Not found');
+    
+    return axios.get(`${API_URL}/api/v1/auctions/auctions/`, { 
+      params: { featured: true, limit: 3 },
+      headers: token ? {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      } : {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+  },
+  
+  getCategories: () => {
+    const token = localStorage.getItem('token');
+    console.log('Token for categories API call:', token ? 'Found' : 'Not found');
+    
+    // Use the correct endpoint
+    return axios.get(`${API_URL}/api/v1/auctions/categories/`, {
+      headers: token ? {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      } : {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+  }
 };
 
 const HomePage = () => {
@@ -46,10 +75,13 @@ const HomePage = () => {
     };
   }, []);
 
+  // Update your fetchData function with better error handling and debugging
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
+        
+        console.log('Making API requests to:', `${API_URL}/api/v1/auctions/auctions/`, `${API_URL}/api/v1/auctions/categories/`);
         
         // Make parallel API requests
         const [auctionsResponse, categoriesResponse] = await Promise.all([
@@ -57,64 +89,102 @@ const HomePage = () => {
           api.getCategories()
         ]);
         
-        // Process auction data from the API
-        const auctionsData = auctionsResponse.data.data?.auctions || [];
+        console.log('Auctions API response:', auctionsResponse.data);
+        console.log('Categories API response:', categoriesResponse.data);
+        
+        // Process auction data from the API with robust parsing
+        let auctionsData = [];
+        
+        if (auctionsResponse.data?.data?.auctions) {
+          auctionsData = auctionsResponse.data.data.auctions;
+        } else if (auctionsResponse.data?.auctions) {
+          auctionsData = auctionsResponse.data.auctions;
+        } else if (Array.isArray(auctionsResponse.data?.data)) {
+          auctionsData = auctionsResponse.data.data;
+        } else if (Array.isArray(auctionsResponse.data)) {
+          auctionsData = auctionsResponse.data;
+        } else {
+          console.warn('Could not parse auctions data, using fallback');
+        }
+        
+        // Process categories with robust parsing
+        let categoriesData = [];
+        
+        if (categoriesResponse.data?.data?.categories) {
+          categoriesData = categoriesResponse.data.data.categories;
+        } else if (categoriesResponse.data?.categories) {
+          categoriesData = categoriesResponse.data.categories;
+        } else if (Array.isArray(categoriesResponse.data?.data)) {
+          categoriesData = categoriesResponse.data.data;
+        } else if (Array.isArray(categoriesResponse.data)) {
+          categoriesData = categoriesResponse.data;
+        } else {
+          console.warn('Could not parse categories data, using fallback');
+        }
+        
+        // Map the data to component format
         const processedAuctions = auctionsData.map(auction => ({
           id: auction.id,
           title: auction.title,
           currentBid: auction.current_price || auction.starting_price,
-          image: auction.item_data?.image_urls?.[0] || 'https://picsum.photos/id/28/300/200',
+          image: auction.image_urls?.[0] || auction.item?.image_urls?.[0] || 'https://picsum.photos/id/28/300/200',
           endsAt: auction.end_time
         }));
-        
-        // Process category data from the API
-        const categoriesData = categoriesResponse.data.data?.categories || [];
-        const categoryIcons = {
-          'Electronics': '💻',
-          'Collectibles': '🏆',
-          'Fashion': '👕',
-          'Home & Garden': '🏡',
-          'Vehicles': '🚗',
-          'Art': '🎨',
-          'Jewelry': '💍',
-          'Books': '📚',
-          'Sports': '⚽',
-          'Toys': '🧸'
-        };
         
         const processedCategories = categoriesData.map(category => ({
           id: category.id,
           name: category.name,
-          icon: categoryIcons[category.name] || '📦'
+          description: category.description,
+          image: category.image || `https://picsum.photos/id/${category.id + 20}/300/200`
         }));
         
         setFeaturedAuctions(processedAuctions);
         setCategories(processedCategories);
         setLoading(false);
+        setError(null);
       } catch (error) {
         console.error('Error fetching data:', error);
-        setError('Could not load data from the server. Showing sample data instead.');
         
-        // Mock data as fallback
-        setFeaturedAuctions([
+        let errorMessage = 'Could not load data from the server. Showing sample data instead.';
+        
+        if (error.response) {
+          console.error('Error response data:', error.response.data);
+          console.error('Error response status:', error.response.status);
+          
+          if (error.response.status === 401) {
+            errorMessage = 'Authentication required. Please log in.';
+          } else if (error.response.data?.message) {
+            errorMessage = `Server error: ${error.response.data.message}`;
+          }
+        } else if (error.request) {
+          errorMessage = 'No response from server. Please check your connection.';
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+        
+        setError(errorMessage);
+        
+        // Continue with fallback data
+        const mockAuctions = [
           { id: 1, title: 'Vintage Watch Collection', currentBid: 1200, image: 'https://picsum.photos/id/28/300/200', endsAt: new Date(Date.now() + 86400000).toISOString() },
           { id: 2, title: 'Gaming Console Bundle', currentBid: 450, image: 'https://picsum.photos/id/96/300/200', endsAt: new Date(Date.now() + 172800000).toISOString() },
           { id: 3, title: 'Antique Furniture Set', currentBid: 850, image: 'https://picsum.photos/id/116/300/200', endsAt: new Date(Date.now() + 259200000).toISOString() },
-        ]);
+        ];
         
-        setCategories([
-          { id: 1, name: 'Electronics', icon: '💻' },
-          { id: 2, name: 'Collectibles', icon: '🏆' },
-          { id: 3, name: 'Fashion', icon: '👕' },
-          { id: 4, name: 'Home & Garden', icon: '🏡' },
-          { id: 5, name: 'Vehicles', icon: '🚗' },
-        ]);
+        const mockCategories = [
+          { id: 1, name: 'Electronics', description: 'Devices and gadgets', image: 'https://picsum.photos/id/21/300/200' },
+          { id: 2, name: 'Collectibles', description: 'Rare and unique items', image: 'https://picsum.photos/id/22/300/200' },
+          { id: 3, name: 'Fashion', description: 'Clothing and accessories', image: 'https://picsum.photos/id/23/300/200' },
+          { id: 4, name: 'Home & Garden', description: 'Furniture and decor', image: 'https://picsum.photos/id/24/300/200' },
+          { id: 5, name: 'Vehicles', description: 'Cars and bikes', image: 'https://picsum.photos/id/25/300/200' },
+        ];
         
+        setFeaturedAuctions(mockAuctions);
+        setCategories(mockCategories);
         setLoading(false);
       }
     };
-
-    // Call the function to fetch data
+    
     fetchData();
   }, []);
 
@@ -172,9 +242,9 @@ const HomePage = () => {
                       </div>
                       <div className="auction-details">
                         <h3>{auction.title}</h3>
-                        <p className="current-bid">Current Bid: ${auction.currentBid.toFixed(2)}</p>
+                        <p className="current-bid">Current Bid: ${(parseFloat(auction.currentBid) || 0).toFixed(2)}</p>
                         <p className="time-remaining">{formatTimeRemaining(auction.endsAt)}</p>
-                        <Link to={`/auction/${auction.id}`} className="btn btn-outline">View Auction</Link>
+                        <Link to={`/auction/${auction.id.toString()}`} className="btn btn-outline">View Auction</Link>
                       </div>
                     </div>
                   ))}

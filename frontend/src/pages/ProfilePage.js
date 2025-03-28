@@ -1,227 +1,231 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/ProfilePage.css';
+import apiService from '../services/api';
+
+// Define API_URL
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const ProfilePage = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('listings');
-  const [myListings, setMyListings] = useState([]);
-  const [myBids, setMyBids] = useState([]);
-  const [wonAuctions, setWonAuctions] = useState([]);
-  const [watchlist, setWatchlist] = useState([]);
+  const { id: sellerId } = useParams(); // Get sellerId from URL if present
   const navigate = useNavigate();
+  const [userData, setUserData] = useState(null);
+  const [userAuctions, setUserAuctions] = useState([]);
+  const [userTransactions, setUserTransactions] = useState([]);
+  const [autoBids, setAutoBids] = useState([]);
+  const [activeTab, setActiveTab] = useState('auctions');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isCurrentUser, setIsCurrentUser] = useState(false);
   
-  // Check if user is logged in
-  useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        navigate('/login?redirect=/profile');
-        return;
-      }
-      
-      // In a real app, would validate token with backend
-      fetchUserData();
-    };
-    
-    checkAuth();
-    
-    // Add event listener to respond to authentication changes
-    window.addEventListener('authStateChanged', checkAuth);
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('authStateChanged', checkAuth);
-    };
-  }, [navigate]);
+  // Helper function for currency formatting
+  const formatCurrency = (value) => {
+    const numValue = parseFloat(value);
+    return isNaN(numValue) ? '0.00' : numValue.toFixed(2);
+  };
   
-  const fetchUserData = async () => {
+  const fetchUserTransactions = async () => {
     try {
-      const userData = JSON.parse(localStorage.getItem('user'));
+      const token = localStorage.getItem('token');
+      if (!token) return;
       
-      if (userData) {
-        setUser({
-          id: userData.id || 1001,
-          name: `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || userData.username || 'User',
-          email: userData.email || 'user@example.com',
-          avatar: userData.avatar || 'https://picsum.photos/id/64/200/200',
-          address: userData.address || '123 Main St, New York, NY 10001',
-          phone: userData.phone || '(555) 123-4567',
-          rating: userData.rating || 4.7,
-          joinedDate: userData.signup_datetime || '2021-06-15',
-          bio: userData.bio || 'Passionate collector of vintage items and antiques.'
-        });
-        
-        // Mock listings data
-        const mockListings = [
-          {
-            id: 101,
-            title: 'Vintage Camera',
-            currentBid: 250,
-            image: 'https://picsum.photos/id/36/300/200',
-            endsAt: new Date(Date.now() + 172800000).toISOString(),
-            status: 'active',
-            bidCount: 5
-          },
-          {
-            id: 102,
-            title: 'Antique Chair',
-            currentBid: 400,
-            image: 'https://picsum.photos/id/42/300/200',
-            endsAt: new Date(Date.now() - 86400000).toISOString(),
-            status: 'ended',
-            bidCount: 8
-          },
-          {
-            id: 103,
-            title: 'Rare Book Collection',
-            currentBid: 180,
-            image: 'https://picsum.photos/id/24/300/200',
-            endsAt: new Date(Date.now() + 432000000).toISOString(),
-            status: 'active',
-            bidCount: 3
-          }
-        ];
-        
-        // Mock bids data
-        const mockBids = [
-          {
-            id: 201,
-            auctionId: 301,
-            auctionTitle: 'Vintage Watch Collection',
-            bidAmount: 1200,
-            bidTime: new Date(Date.now() - 3600000).toISOString(),
-            auctionImage: 'https://picsum.photos/id/28/300/200',
-            endsAt: new Date(Date.now() + 86400000).toISOString(),
-            currentBid: 1250,
-            status: 'outbid'
-          },
-          {
-            id: 202,
-            auctionId: 302,
-            auctionTitle: 'Gaming Console Bundle',
-            bidAmount: 450,
-            bidTime: new Date(Date.now() - 172800000).toISOString(),
-            auctionImage: 'https://picsum.photos/id/96/300/200',
-            endsAt: new Date(Date.now() + 172800000).toISOString(),
-            currentBid: 450,
-            status: 'winning'
-          },
-          {
-            id: 203,
-            auctionId: 303,
-            auctionTitle: 'Collectible Action Figures',
-            bidAmount: 120,
-            bidTime: new Date(Date.now() - 259200000).toISOString(),
-            auctionImage: 'https://picsum.photos/id/20/300/200',
-            endsAt: new Date(Date.now() - 86400000).toISOString(),
-            currentBid: 150,
-            status: 'lost'
-          }
-        ];
-        
-        // Mock won auctions
-        const mockWonAuctions = [
-          {
-            id: 401,
-            title: 'Antique Pocket Watch',
-            finalBid: 560,
-            image: 'https://picsum.photos/id/27/300/200',
-            endedAt: new Date(Date.now() - 604800000).toISOString(),
-            paymentStatus: 'completed',
-            shippingStatus: 'delivered'
-          },
-          {
-            id: 402,
-            title: 'Vinyl Record Collection',
-            finalBid: 320,
-            image: 'https://picsum.photos/id/145/300/200',
-            endedAt: new Date(Date.now() - 1209600000).toISOString(),
-            paymentStatus: 'completed',
-            shippingStatus: 'shipped'
-          }
-        ];
-        
-        // Mock watchlist
-        const mockWatchlist = [
-          {
-            id: 501,
-            title: 'Rare Coin Set',
-            currentBid: 780,
-            image: 'https://picsum.photos/id/30/300/200',
-            endsAt: new Date(Date.now() + 345600000).toISOString(),
-            bidCount: 12
-          },
-          {
-            id: 502,
-            title: 'Vintage Turntable',
-            currentBid: 290,
-            image: 'https://picsum.photos/id/146/300/200',
-            endsAt: new Date(Date.now() + 172800000).toISOString(),
-            bidCount: 7
-          },
-          {
-            id: 503,
-            title: 'Art Deco Lamp',
-            currentBid: 150,
-            image: 'https://picsum.photos/id/129/300/200',
-            endsAt: new Date(Date.now() + 86400000).toISOString(),
-            bidCount: 4
-          }
-        ];
-        
-        setMyListings(mockListings);
-        setMyBids(mockBids);
-        setWonAuctions(mockWonAuctions);
-        setWatchlist(mockWatchlist);
-      } else {
-        console.error('No user data found in localStorage');
-        navigate('/login?redirect=/profile');
-        return;
-      }
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const response = await axios.get(`${API_URL}/api/v1/transactions/transactions/`, { headers });
       
-      setLoading(false);
+      const transactionsData = response.data.data || response.data || [];
+      setUserTransactions(transactionsData);
     } catch (error) {
-      console.error('Error fetching user data:', error);
-      setLoading(false);
+      console.error('Error fetching transactions:', error);
     }
   };
-  
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    
-    window.dispatchEvent(new Event('authStateChanged'));
-    
-    navigate('/login');
+
+  const fetchAutoBids = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      const response = await axios.get(`${API_URL}/api/v1/auctions/autobids/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const autobidsData = response.data?.data || response.data || [];
+      setAutoBids(autobidsData);
+    } catch (error) {
+      console.error('Error fetching auto-bids:', error);
+    }
   };
-  
-  // Format date for display
-  const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString(undefined, options);
+
+  const toggleAutoBid = async (bidId, activate) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      const endpoint = activate ? 'activate' : 'deactivate';
+      await axios.post(`${API_URL}/api/v1/auctions/autobids/${bidId}/${endpoint}/`, {}, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Refresh the auto-bids list
+      fetchAutoBids();
+    } catch (error) {
+      console.error(`Error ${activate ? 'activating' : 'deactivating'} auto-bid:`, error);
+      alert(`Failed to ${activate ? 'activate' : 'deactivate'} auto-bidding. Please try again.`);
+    }
   };
-  
-  // Format time remaining
-  const formatTimeRemaining = (endDateString) => {
-    const endDate = new Date(endDateString);
-    const now = new Date();
-    const timeRemaining = endDate - now;
-    
-    if (timeRemaining <= 0) return 'Ended';
-    
-    const days = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    return `${days}d ${hours}h remaining`;
+
+  const handleProfileUpdate = (updatedData) => {
+    setUserData({
+      ...userData,
+      ...updatedData
+    });
   };
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      console.log('Environment:', process.env.NODE_ENV);
+      console.log('Seller ID from URL:', sellerId);
+      console.log('API URL being used:', API_URL);
+
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('token');
+        
+        if (!token && !sellerId) {
+          // Redirect to login if no token and not viewing a specific seller
+          navigate('/login');
+          return;
+        }
+        
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        let userResponse;
+        
+        if (sellerId) {
+          // Fetching another seller's profile
+          try {
+            userResponse = await axios.get(`${API_URL}/api/v1/accounts/users/${sellerId}/`, { headers });
+          } catch (userError) {
+            // Try alternative endpoint
+            userResponse = await axios.get(`${API_URL}/api/v1/accounts/seller/${sellerId}/`, { headers });
+          }
+          setIsCurrentUser(false);
+        } else {
+          // Fetching current user's profile
+          userResponse = await axios.get(`${API_URL}/api/v1/accounts/profile/`, { headers });
+          setIsCurrentUser(true);
+        }
+        
+        // Extract user data from response depending on API structure
+        const userData = userResponse.data.data || userResponse.data;
+        setUserData(userData);
+        
+        // Fetch user's auctions using the updated API service
+        try {
+          let auctionsData = [];
+          
+          if (isCurrentUser) {
+            // For current user, use the my_auctions endpoint
+            const response = await apiService.getMyAuctions();
+            auctionsData = response.data?.data || response.data || [];
+          } else {
+            // For other users, use the general endpoint with filtering
+            const response = await apiService.getAuctions({ seller_id: sellerId });
+            auctionsData = response.data?.data || response.data || [];
+          }
+          
+          console.log('Auctions data:', auctionsData);
+          
+          // Ensure we handle all possible data structures
+          if (!Array.isArray(auctionsData)) {
+            if (auctionsData.auctions && Array.isArray(auctionsData.auctions)) {
+              auctionsData = auctionsData.auctions;
+            } else {
+              auctionsData = [];
+            }
+          }
+          
+          setUserAuctions(auctionsData);
+        } catch (auctionError) {
+          console.error('Failed to fetch auctions:', auctionError);
+          setUserAuctions([]);
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching profile data:', error);
+        
+        // Always use mock data in development when API fails
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Using mock data for development');
+          const mockUser = {
+            id: sellerId || '123',
+            username: 'testuser',
+            first_name: 'Test',
+            last_name: 'User',
+            email: 'test@example.com',
+            date_joined: '2020-01-01T00:00:00Z',
+            bio: 'This is a test user bio.',
+            location: 'Test City, TS'
+          };
+          
+          const mockAuctions = [
+            {
+              id: '1',
+              title: 'Vintage Watch',
+              current_price: 120.50,
+              images: ['https://picsum.photos/id/28/800/600'],
+              end_time: new Date(Date.now() + 86400000).toISOString()
+            },
+            {
+              id: '2',
+              title: 'Antique Chair',
+              current_price: 350.75,
+              images: ['https://picsum.photos/id/30/800/600'],
+              end_time: new Date(Date.now() + 172800000).toISOString()
+            }
+          ];
+          
+          setUserData(mockUser);
+          setUserAuctions(mockAuctions);
+          setLoading(false);
+          setError(''); // Clear the error so the mock data shows
+          return; // Exit early to prevent showing the error
+        }
+        
+        // Only show error if we're not in development or mock data isn't available
+        setError('Failed to load profile. Please try again later.');
+        setLoading(false);
+      }
+    };
+    
+    fetchUserData();
+    
+    if (isCurrentUser) {
+      fetchUserTransactions();
+      fetchAutoBids();
+    }
+  }, [sellerId, navigate, isCurrentUser]);
   
   if (loading) {
-    return <div className="loading-container">Loading profile data...</div>;
+    return (
+      <div className="loading-container">
+        <p>Loading profile data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="error-container">
+        <p>{error}</p>
+        <Link to="/" className="btn btn-primary">Back to Home</Link>
+      </div>
+    );
   }
 
   return (
@@ -229,301 +233,271 @@ const ProfilePage = () => {
       <div className="container">
         <div className="profile-header">
           <div className="profile-avatar">
-            <img src={user.avatar} alt={user.name} />
+            {userData?.avatar_url ? (
+              <img src={userData.avatar_url} alt="Profile avatar" />
+            ) : (
+              <div className="default-avatar">
+                {userData?.first_name?.charAt(0) || userData?.username?.charAt(0) || '?'}
+              </div>
+            )}
           </div>
           
           <div className="profile-info">
-            <h1>{user.name}</h1>
-            <div className="profile-meta">
-              <p>Member since: {formatDate(user.joinedDate)}</p>
-              <p>Rating: {user.rating}/5</p>
+            <h2>{userData?.first_name} {userData?.last_name}</h2>
+            
+            <div className="profile-details">
+              <p>
+                <strong>Username:</strong> {userData?.username}
+              </p>
+              
+              <p>
+                <strong>Email:</strong> {userData?.email}
+              </p>
+              
+              <p>
+                <strong>Member since:</strong> {
+                  userData?.signup_datetime || userData?.date_joined 
+                    ? new Date(userData?.signup_datetime || userData?.date_joined).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })
+                    : 'N/A'
+                }
+              </p>
+              
+              <p>
+                <strong>Location:</strong> {userData?.location || 'Not specified'}
+              </p>
             </div>
-            <p className="profile-bio">{user.bio}</p>
-          </div>
-          
-          <div className="profile-actions">
-            <Link to="/profile/edit" className="btn btn-outline">Edit Profile</Link>
-            <button onClick={handleLogout} className="btn btn-secondary">Log Out</button>
+            
+            {isCurrentUser && (
+              <div className="profile-actions">
+                <Link 
+                  to="/profile/edit" 
+                  className="btn btn-primary"
+                >
+                  Edit Profile
+                </Link>
+                
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => navigate('/wallet')}
+                >
+                  Manage Wallet
+                </button>
+              </div>
+            )}
           </div>
         </div>
         
-        <div className="profile-tabs">
-          <div className="tabs-header">
-            <button 
-              className={`tab-btn ${activeTab === 'listings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('listings')}
-            >
-              My Listings
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'bids' ? 'active' : ''}`}
-              onClick={() => setActiveTab('bids')}
-            >
-              My Bids
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'won' ? 'active' : ''}`}
-              onClick={() => setActiveTab('won')}
-            >
-              Won Auctions
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'watchlist' ? 'active' : ''}`}
-              onClick={() => setActiveTab('watchlist')}
-            >
-              Watchlist
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
-            >
-              Account Settings
-            </button>
+        <div className="profile-content">
+          <div className="user-info">
+            <div className="user-details">
+              {userData?.bio && (
+                <div className="user-bio">
+                  <h3>About</h3>
+                  <p>{userData.bio}</p>
+                </div>
+              )}
+            </div>
           </div>
           
-          <div className="tab-content">
-            {/* My Listings Tab */}
-            {activeTab === 'listings' && (
-              <div className="tab-pane">
-                <div className="tab-header">
-                  <h2>My Listings</h2>
-                  <Link to="/create-auction" className="btn btn-primary">Create New Listing</Link>
-                </div>
+          <div className="profile-tabs">
+            <div className="tabs-header">
+              <button 
+                onClick={() => setActiveTab('auctions')} 
+                className={`tab-btn ${activeTab === 'auctions' ? 'active' : ''}`}
+              >
+                {isCurrentUser ? 'My Auctions' : `${userData?.username}'s Auctions`}
+              </button>
+              
+              {isCurrentUser && (
+                <button 
+                  onClick={() => setActiveTab('transactions')} 
+                  className={`tab-btn ${activeTab === 'transactions' ? 'active' : ''}`}
+                >
+                  My Purchases
+                </button>
+              )}
+              
+              {isCurrentUser && (
+                <button 
+                  onClick={() => setActiveTab('autobids')} 
+                  className={`tab-btn ${activeTab === 'autobids' ? 'active' : ''}`}
+                >
+                  My Auto-Bids
+                </button>
+              )}
+            </div>
+            
+            {activeTab === 'auctions' && (
+              <div className="user-auctions">
+                <h2>{isCurrentUser ? 'My Auctions' : `${userData?.username || userData?.first_name}'s Auctions`}</h2>
                 
-                {myListings.length === 0 ? (
-                  <div className="empty-state">
-                    <p>You haven't listed any items for auction yet.</p>
-                    <Link to="/create-auction" className="btn btn-primary">Create Your First Listing</Link>
+                {userAuctions.length > 0 ? (
+                  <div className="auctions-grid">
+                    {userAuctions.map(auction => {
+                      // Handle different property naming conventions
+                      const auctionId = auction.id || auction._id;
+                      const title = auction.title || auction.name;
+                      const price = auction.current_price || auction.currentPrice || auction.starting_price || auction.startingPrice || 0;
+                      const imageUrls = auction.images || auction.imageUrls || auction.item?.image_urls || auction.item?.imageUrls || [];
+                      const imageUrl = Array.isArray(imageUrls) && imageUrls.length > 0 
+                        ? imageUrls[0]
+                        : 'https://via.placeholder.com/300x200?text=No+Image';
+                        
+                      return (
+                        <div key={auctionId} className="auction-card">
+                          <img src={imageUrl} alt={title} />
+                          <div className="auction-card-info">
+                            <h3>{title}</h3>
+                            <p className="current-bid">${formatCurrency(price)}</p>
+                            <Link 
+                              to={`/auction/${auctionId}`} 
+                              className="btn btn-primary btn-sm"
+                            >
+                              View Auction
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="listings-grid">
-                    {myListings.map(listing => (
-                      <div key={listing.id} className="listing-card">
-                        <div className="listing-image">
-                          <img src={listing.image} alt={listing.title} />
-                          <div className={`listing-status ${listing.status}`}>
-                            {listing.status === 'active' ? 'Active' : 'Ended'}
-                          </div>
-                        </div>
-                        <div className="listing-details">
-                          <h3>{listing.title}</h3>
-                          <p className="current-bid">Current Bid: ${listing.currentBid}</p>
-                          <p className="bid-count">{listing.bidCount} bids</p>
-                          <p className="time-remaining">{formatTimeRemaining(listing.endsAt)}</p>
-                          <div className="listing-actions">
-                            <Link to={`/auction/${listing.id}`} className="btn btn-small">View</Link>
-                            {listing.status === 'active' && (
-                              <Link to={`/edit-auction/${listing.id}`} className="btn btn-small btn-outline">Edit</Link>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  <p className="no-auctions-message">
+                    {isCurrentUser 
+                      ? 'You have no active auctions. Why not create one?' 
+                      : 'This seller has no active auctions.'}
+                  </p>
+                )}
+                
+                {isCurrentUser && (
+                  <div className="create-auction-link">
+                    <Link to="/create-auction" className="btn btn-secondary">
+                      Create New Auction
+                    </Link>
+                  </div>
+                )}
+                
+                {process.env.NODE_ENV === 'development' && isCurrentUser && (
+                  <div className="debug-section" style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '5px' }}>
+                    <h3>Development Tools</h3>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ marginRight: '10px' }}
+                      onClick={async () => {
+                        try {
+                          console.log('Testing auction endpoints...');
+                          
+                          // Define headers here since we're outside fetchUserData scope
+                          const token = localStorage.getItem('token');
+                          const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                          
+                          // Try various endpoints
+                          const endpoints = [
+                            '/api/v1/auctions/auctions/my_auctions/',
+                            '/api/v1/auctions/auctions/?seller_id=' + userData.id,
+                            '/api/v1/auctions/auctions/user/' + userData.id,
+                          ];
+                          
+                          for (const endpoint of endpoints) {
+                            try {
+                              console.log(`Testing endpoint: ${endpoint}`);
+                              const response = await axios.get(`${API_URL}${endpoint}`, { headers });
+                              console.log(`Response from ${endpoint}:`, response.data);
+                            } catch (error) {
+                              console.error(`Error with ${endpoint}:`, error.response || error);
+                            }
+                          }
+                          
+                          alert('Check the console for details');
+                        } catch (error) {
+                          console.error('Error testing endpoints:', error);
+                          alert('Error: ' + (error.message || 'Unknown error'));
+                        }
+                      }}
+                    >
+                      Test Auction Endpoints
+                    </button>
                   </div>
                 )}
               </div>
             )}
             
-            {/* My Bids Tab */}
-            {activeTab === 'bids' && (
-              <div className="tab-pane">
-                <h2>My Bids</h2>
+            {activeTab === 'transactions' && isCurrentUser && (
+              <div className="user-transactions">
+                <h2>My Purchases</h2>
                 
-                {myBids.length === 0 ? (
-                  <div className="empty-state">
-                    <p>You haven't placed any bids yet.</p>
-                    <Link to="/auctions" className="btn btn-primary">Browse Auctions</Link>
+                {userTransactions.length > 0 ? (
+                  <div className="transactions-list">
+                    {userTransactions.filter(tx => tx.transaction_type === 'purchase').map(transaction => (
+                      <div key={transaction.id} className="transaction-card">
+                        <div className="transaction-details">
+                          <h3>{transaction.reference}</h3>
+                          <p className="transaction-amount">Amount: ${formatCurrency(transaction.amount)}</p>
+                          <p className="transaction-date">Date: {new Date(transaction.created_at).toLocaleDateString()}</p>
+                          <p className="transaction-status">Status: {transaction.status}</p>
+                        </div>
+                        <Link to={`/auction/${transaction.reference_id}`} className="btn btn-outline-small">
+                          View Auction
+                        </Link>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="bids-list">
-                    {myBids.map(bid => (
-                      <div key={bid.id} className={`bid-card ${bid.status}`}>
-                        <div className="bid-image">
-                          <img src={bid.auctionImage} alt={bid.auctionTitle} />
-                        </div>
-                        <div className="bid-details">
-                          <h3>{bid.auctionTitle}</h3>
-                          <div className="bid-info">
-                            <p>Your Bid: <span className="bold">${bid.bidAmount}</span></p>
-                            <p>Current Bid: <span className="bold">${bid.currentBid}</span></p>
-                            <p>Bid Status: 
-                              <span className={`bid-status ${bid.status}`}>
-                                {bid.status === 'winning' ? 'Winning' : 
-                                 bid.status === 'outbid' ? 'Outbid' : 'Lost'}
+                  <p>You haven't made any purchases yet.</p>
+                )}
+              </div>
+            )}
+            
+            {activeTab === 'autobids' && isCurrentUser && (
+              <div className="profile-section">
+                <h2>Your Auto-Bidding</h2>
+                
+                {autoBids.length === 0 ? (
+                  <p>You haven't set up auto-bidding on any auctions.</p>
+                ) : (
+                  <div className="auto-bids-list">
+                    <table className="auto-bids-table">
+                      <thead>
+                        <tr>
+                          <th>Auction</th>
+                          <th>Max Bid</th>
+                          <th>Current Price</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {autoBids.map(bid => (
+                          <tr key={bid.id}>
+                            <td>
+                              <Link to={`/auction/${bid.auction.id}`}>
+                                {bid.auction.title}
+                              </Link>
+                            </td>
+                            <td>${parseFloat(bid.max_amount).toFixed(2)}</td>
+                            <td>${parseFloat(bid.auction.current_price).toFixed(2)}</td>
+                            <td>
+                              <span className={`status ${bid.is_active ? 'active' : 'inactive'}`}>
+                                {bid.is_active ? 'Active' : 'Paused'}
                               </span>
-                            </p>
-                          </div>
-                          <p className="bid-time">Bid placed on {formatDate(bid.bidTime)}</p>
-                          <p className="time-remaining">{formatTimeRemaining(bid.endsAt)}</p>
-                          <div className="bid-actions">
-                            <Link to={`/auction/${bid.auctionId}`} className="btn btn-small">View Auction</Link>
-                            {bid.status === 'outbid' && new Date(bid.endsAt) > new Date() && (
-                              <Link to={`/auction/${bid.auctionId}`} className="btn btn-small btn-primary">Bid Again</Link>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                            </td>
+                            <td>
+                              <button 
+                                onClick={() => toggleAutoBid(bid.id, !bid.is_active)}
+                                className={`btn btn-sm ${bid.is_active ? 'btn-outline' : 'btn-primary'}`}
+                              >
+                                {bid.is_active ? 'Pause' : 'Resume'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
-              </div>
-            )}
-            
-            {/* Won Auctions Tab */}
-            {activeTab === 'won' && (
-              <div className="tab-pane">
-                <h2>Won Auctions</h2>
-                
-                {wonAuctions.length === 0 ? (
-                  <div className="empty-state">
-                    <p>You haven't won any auctions yet.</p>
-                    <Link to="/auctions" className="btn btn-primary">Browse Auctions</Link>
-                  </div>
-                ) : (
-                  <div className="won-auctions-grid">
-                    {wonAuctions.map(auction => (
-                      <div key={auction.id} className="won-auction-card">
-                        <div className="won-auction-image">
-                          <img src={auction.image} alt={auction.title} />
-                        </div>
-                        <div className="won-auction-details">
-                          <h3>{auction.title}</h3>
-                          <p className="final-bid">Final Bid: ${auction.finalBid}</p>
-                          <p className="won-date">Won on {formatDate(auction.endedAt)}</p>
-                          <div className="status-indicators">
-                            <div className={`status-indicator ${auction.paymentStatus}`}>
-                              Payment: {auction.paymentStatus}
-                            </div>
-                            <div className={`status-indicator ${auction.shippingStatus}`}>
-                              Shipping: {auction.shippingStatus}
-                            </div>
-                          </div>
-                          <div className="won-auction-actions">
-                            <Link to={`/auction/${auction.id}`} className="btn btn-small">View Details</Link>
-                            {auction.paymentStatus !== 'completed' && (
-                              <Link to={`/payment/${auction.id}`} className="btn btn-small btn-primary">Complete Payment</Link>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* Watchlist Tab */}
-            {activeTab === 'watchlist' && (
-              <div className="tab-pane">
-                <h2>Watchlist</h2>
-                
-                {watchlist.length === 0 ? (
-                  <div className="empty-state">
-                    <p>Your watchlist is empty.</p>
-                    <Link to="/auctions" className="btn btn-primary">Browse Auctions</Link>
-                  </div>
-                ) : (
-                  <div className="watchlist-grid">
-                    {watchlist.map(item => (
-                      <div key={item.id} className="watchlist-card">
-                        <div className="watchlist-image">
-                          <img src={item.image} alt={item.title} />
-                        </div>
-                        <div className="watchlist-details">
-                          <h3>{item.title}</h3>
-                          <p className="current-bid">Current Bid: ${item.currentBid}</p>
-                          <p className="bid-count">{item.bidCount} bids</p>
-                          <p className="time-remaining">{formatTimeRemaining(item.endsAt)}</p>
-                          <div className="watchlist-actions">
-                            <Link to={`/auction/${item.id}`} className="btn btn-small">View Auction</Link>
-                            <button className="btn btn-small btn-outline">Remove</button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* Account Settings Tab */}
-            {activeTab === 'settings' && (
-              <div className="tab-pane">
-                <h2>Account Settings</h2>
-                
-                <div className="settings-form">
-                  <div className="form-section">
-                    <h3>Personal Information</h3>
-                    <div className="form-group">
-                      <label>Full Name</label>
-                      <input type="text" value={user.name} readOnly />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Email Address</label>
-                      <input type="email" value={user.email} readOnly />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Phone Number</label>
-                      <input type="tel" value={user.phone} readOnly />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Address</label>
-                      <input type="text" value={user.address} readOnly />
-                    </div>
-                    
-                    <Link to="/profile/edit" className="btn btn-primary">Edit Information</Link>
-                  </div>
-                  
-                  <div className="form-section">
-                    <h3>Change Password</h3>
-                    
-                    <div className="form-group">
-                      <label>Current Password</label>
-                      <input type="password" placeholder="Enter current password" />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>New Password</label>
-                      <input type="password" placeholder="Enter new password" />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Confirm New Password</label>
-                      <input type="password" placeholder="Confirm new password" />
-                    </div>
-                    
-                    <button className="btn btn-primary">Update Password</button>
-                  </div>
-                  
-                  <div className="form-section">
-                    <h3>Notification Settings</h3>
-                    
-                    <div className="form-check">
-                      <input type="checkbox" id="emailBids" checked />
-                      <label htmlFor="emailBids">Email notifications for new bids</label>
-                    </div>
-                    
-                    <div className="form-check">
-                      <input type="checkbox" id="emailOutbid" checked />
-                      <label htmlFor="emailOutbid">Email notifications when outbid</label>
-                    </div>
-                    
-                    <div className="form-check">
-                      <input type="checkbox" id="emailEnding" checked />
-                      <label htmlFor="emailEnding">Email notifications when watched auctions are ending</label>
-                    </div>
-                    
-                    <button className="btn btn-primary">Save Notification Preferences</button>
-                  </div>
-                  
-                  <div className="danger-zone">
-                    <h3>Danger Zone</h3>
-                    <button className="btn btn-danger">Delete Account</button>
-                  </div>
-                </div>
               </div>
             )}
           </div>

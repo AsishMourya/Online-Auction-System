@@ -70,8 +70,14 @@
   .shipping-option {
     display: flex;
     gap: 10px;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
     align-items: center;
+  }
+  
+  .shipping-option:last-of-type {
+    border-bottom: none;
   }
   
   .shipping-option input {
@@ -108,17 +114,35 @@
   }
   
   .image-preview {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 15px;
+    position: relative;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    height: 100px;
   }
   
   .image-preview img {
-    width: 100px;
-    height: 100px;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
-    border-radius: 5px;
+  }
+  
+  .remove-image-btn {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
   }
   
   .submit-button {
@@ -199,4 +223,134 @@
     content: "✓";
     margin-right: 8px;
     font-weight: bold;
+  }
+
+  .auction-preview {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+  }
+  
+  .auction-preview p {
+    margin: 5px 0;
+  }
+
+  .image-upload-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .image-upload-box {
+    border: 2px dashed #ddd;
+    padding: 20px;
+    text-align: center;
+    border-radius: 4px;
+  }
+
+  .file-input {
+    display: none;
+  }
+
+  .file-input-label {
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .upload-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .image-previews {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+  }
+
+  .payment-methods {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  .payment-method-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .remove-btn, .add-btn {
+    background: none;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .remove-btn {
+    color: #e53935;
+  }
+
+  .add-btn {
+    color: #4285f4;
+    margin-top: 10px;
+  }
+
+  .quarter {
+    width: 25%;
+  }
+
+  .three-quarters {
+    width: 75%;
+  }
+
+  /* Notification Preferences Styling */
+  .notification-channels,
+  .notification-types {
+    margin-bottom: 20px;
+  }
+  
+  .notification-channels h3,
+  .notification-types h3 {
+    font-size: 1.1rem;
+    color: #555;
+    margin-bottom: 15px;
+  }
+  
+  .channel-options {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+  }
+  
+  .channel-option,
+  .notification-option {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  
+  .channel-option label,
+  .notification-option label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  
+  .channel-icon {
+    color: #4a90e2;
+    font-size: 1.2rem;
+  }
+  
+  .notification-option input[type="checkbox"],
+  .channel-option input[type="checkbox"] {
+    width: auto;
+    margin-right: 10px;
   }

@@ -280,3 +280,12 @@ class WalletSerializer(serializers.ModelSerializer):
         from apps.auctions.models import Bid
 
         return Bid.objects.filter(bidder=obj.user, status=Bid.STATUS_WON).count()
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'phone_number', 
+            'role', 'date_joined', 'signup_datetime', 'location', 'bio'
+        ]

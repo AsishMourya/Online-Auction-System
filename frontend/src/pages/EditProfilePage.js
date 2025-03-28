@@ -12,7 +12,6 @@ const EditProfilePage = () => {
   
   // Form state
   const [formData, setFormData] = useState({
-    username: '',
     first_name: '',
     last_name: '',
     email: '',
@@ -39,44 +38,33 @@ const EditProfilePage = () => {
     fetchUserData();
   }, [navigate]);
   
-  // Fetch user data from API or localStorage
+  // Update the fetchUserData function to use your actual API
   const fetchUserData = async () => {
     try {
       setLoading(true);
       
-      // In a real app, you would fetch the data from your API
-      // const response = await axios.get('/api/v1/accounts/profile/', {
-      //   headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      // });
-      // const userData = response.data.data;
-      
-      // For now, use mock data or data from localStorage
-      const userData = JSON.parse(localStorage.getItem('user')) || {};
-      
-      // Check if we have a complete user profile already
-      // If not, simulate a more complete mock profile
-      if (!userData.address || !userData.phone) {
-        // Augment with mock data for fields your backend might not store yet
-        Object.assign(userData, {
-          username: userData.username || 'user123',
-          first_name: userData.first_name || 'John',
-          last_name: userData.last_name || 'Smith',
-          email: userData.email || 'john.smith@example.com',
-          phone: userData.phone || '(555) 123-4567',
-          address: userData.address || '123 Main St, New York, NY 10001',
-          bio: userData.bio || 'Passionate collector of vintage items and antiques. Always looking for unique pieces to add to my collection.',
-          avatar: userData.avatar || 'https://picsum.photos/id/64/200/200'
-        });
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/login?redirect=/profile/edit');
+        return;
       }
+      
+      // Use your actual API endpoint
+      const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/accounts/profile/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const userData = response.data.data || response.data;
       
       // Set form data with user data
       setFormData({
-        username: userData.username || '',
         first_name: userData.first_name || '',
         last_name: userData.last_name || '',
         email: userData.email || '',
-        phone: userData.phone || '',
-        address: userData.address || '',
+        phone: userData.phone_number || '',
+        address: userData.location || '',
         bio: userData.bio || '',
         avatar: null,
         current_password: '',
@@ -85,7 +73,7 @@ const EditProfilePage = () => {
       });
       
       // Set avatar preview
-      setAvatarPreview(userData.avatar);
+      setAvatarPreview(userData.avatar_url || null);
       
       setLoading(false);
     } catch (error) {
@@ -113,93 +101,78 @@ const EditProfilePage = () => {
     }
   };
   
-  // Handle form submission
+  // Update the handleSubmit function to use your actual API
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
     setSuccess(false);
     
-    // Validate form
-    if (formData.new_password && formData.new_password !== formData.confirm_password) {
-      setError('New password and confirm password do not match');
-      setSaving(false);
-      return;
-    }
-    
     try {
-      // In a real app, you would send the data to your API
-      // const formDataObj = new FormData();
-      // Object.entries(formData).forEach(([key, value]) => {
-      //   if (value !== null) {
-      //     formDataObj.append(key, value);
-      //   }
-      // });
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('You must be logged in to update your profile');
+        setSaving(false);
+        return;
+      }
       
-      // const response = await axios.put('/api/v1/accounts/profile/', formDataObj, {
-      //   headers: { 
-      //     Authorization: `Bearer ${localStorage.getItem('token')}`,
-      //     'Content-Type': 'multipart/form-data' 
-      //   }
-      // });
-      
-      // For demo purposes, simulate a successful update
-      // Update the user data in localStorage
-      const currentUser = JSON.parse(localStorage.getItem('user')) || {};
-      const updatedUser = {
-        ...currentUser,
-        username: formData.username,
+      // Prepare form data for API
+      const apiFormData = {
         first_name: formData.first_name,
         last_name: formData.last_name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
+        location: formData.address,
         bio: formData.bio,
-        avatar: avatarPreview // In a real app, this would be a URL from your server
+        phone_number: formData.phone
       };
       
-      // Update localStorage
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      // If avatar is changed, handle file upload
+      if (formData.avatar) {
+        // For file uploads, use FormData
+        const imageFormData = new FormData();
+        imageFormData.append('avatar', formData.avatar);
+        
+        await axios.post(
+          `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/accounts/upload-avatar/`,
+          imageFormData,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data'
+            }
+          }
+        );
+      }
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Update other profile information
+      const response = await axios.put(
+        `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/accounts/profile/`,
+        apiFormData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
       
       setSuccess(true);
       
-      // Reset password fields
-      setFormData(prev => ({
-        ...prev,
-        current_password: '',
-        new_password: '',
-        confirm_password: ''
+      // Update localStorage user data
+      const updatedUser = response.data.data || response.data;
+      const currentUser = JSON.parse(localStorage.getItem('user')) || {};
+      localStorage.setItem('user', JSON.stringify({
+        ...currentUser,
+        ...updatedUser
       }));
-      
-      // Scroll to top to show success message
-      window.scrollTo(0, 0);
       
       setSaving(false);
     } catch (error) {
       console.error('Error updating profile:', error);
       
-      if (error.response) {
-        // Handle specific API errors
-        if (error.response.data?.message) {
-          setError(error.response.data.message);
-        } else if (error.response.data?.errors) {
-          const errorMessages = [];
-          Object.entries(error.response.data.errors).forEach(([field, msgs]) => {
-            if (Array.isArray(msgs)) {
-              errorMessages.push(`${field}: ${msgs.join(' ')}`);
-            } else if (typeof msgs === 'string') {
-              errorMessages.push(`${field}: ${msgs}`);
-            }
-          });
-          setError(errorMessages.join('. '));
-        } else {
-          setError('Failed to update your profile. Please try again.');
-        }
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
       } else {
-        setError('Network error. Please check your internet connection.');
+        setError('Failed to update your profile. Please try again.');
       }
       
       setSaving(false);
@@ -233,14 +206,6 @@ const EditProfilePage = () => {
     }
     
     try {
-      // In a real app, you would send the password data to your API
-      // const response = await axios.post('/api/v1/accounts/change-password/', {
-      //   current_password: formData.current_password,
-      //   new_password: formData.new_password
-      // }, {
-      //   headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      // });
-      
       // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -265,6 +230,60 @@ const EditProfilePage = () => {
         setError(error.response.data.message);
       } else {
         setError('Failed to update your password. Please check your current password and try again.');
+      }
+      
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account? This action cannot be undone and you will lose all your data, including auction history, bids, and personal information.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+    
+    try {
+      setSaving(true);
+      setError(null);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('You must be logged in to delete your account');
+        setSaving(false);
+        return;
+      }
+      
+      // Send delete request to backend
+      await axios.delete(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/v1/accounts/delete-account/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Clear all auth data
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      
+      // Show success message and redirect
+      alert('Your account has been successfully deleted. We\'re sorry to see you go!');
+      
+      // Notify other components about auth state change
+      window.dispatchEvent(new Event('authStateChanged'));
+      
+      // Redirect to home page
+      navigate('/');
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else {
+        setError('Failed to delete your account. Please try again later.');
       }
       
       setSaving(false);
@@ -317,18 +336,6 @@ const EditProfilePage = () => {
                     />
                     <p className="upload-hint">JPG, PNG or GIF, max 5MB</p>
                   </div>
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="username">Username</label>
-                  <input
-                    type="text"
-                    id="username"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    required
-                  />
                 </div>
                 
                 <div className="form-row">
@@ -515,20 +522,19 @@ const EditProfilePage = () => {
             
             <div className="section danger-zone">
               <h2>Account Management</h2>
-              <div className="danger-action">
-                <div className="danger-info">
-                  <h4>Deactivate Account</h4>
-                  <p>Temporarily disable your account. You can reactivate it at any time by logging in.</p>
-                </div>
-                <button className="btn btn-warning">Deactivate</button>
-              </div>
               
               <div className="danger-action">
                 <div className="danger-info">
                   <h4>Delete Account</h4>
                   <p>Permanently delete your account and all associated data. This action cannot be undone.</p>
                 </div>
-                <button className="btn btn-danger">Delete Account</button>
+                <button 
+                  type="button" 
+                  className="btn btn-danger"
+                  onClick={handleDeleteAccount}
+                >
+                  Delete Account
+                </button>
               </div>
             </div>
           </div>
