@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom'; // Add useLocation
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/AuthPage.css';
 
+// API base URL from environment variable
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const AuthPage = () => {
-  const location = useLocation(); // Get current location
+  const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/';
   
   // Initialize login state based on URL path
   const [isLogin, setIsLogin] = useState(location.pathname !== '/register');
   const [formData, setFormData] = useState({
-    name: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -22,6 +27,14 @@ const AuthPage = () => {
   useEffect(() => {
     setIsLogin(location.pathname !== '/register');
   }, [location.pathname]);
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      navigate(redirect);
+    }
+  }, [navigate, redirect]);
 
   const handleChange = (e) => {
     setFormData({
@@ -36,38 +49,196 @@ const AuthPage = () => {
     setLoading(true);
     
     try {
-      if (!isLogin && formData.password !== formData.confirmPassword) {
-        setError('Passwords do not match');
-        setLoading(false);
-        return;
+      // Registration validation
+      if (!isLogin) {
+        if (formData.password !== formData.confirmPassword) {
+          setError('Passwords do not match');
+          setLoading(false);
+          return;
+        }
+        
+        if (formData.password.length < 8) {
+          setError('Password must be at least 8 characters long');
+          setLoading(false);
+          return;
+        }
       }
+      
+      // Debug output to console
+      console.log('Sending request to:', isLogin ? 
+        `${API_URL}/api/v1/accounts/login/` : 
+        `${API_URL}/api/v1/accounts/register/`);
+      
+      let response;
       
       if (isLogin) {
         // Login request
-        // const response = await axios.post('/api/users/login', {
-        //   email: formData.email,
-        //   password: formData.password
-        // });
+        const loginData = {
+          email: formData.email,
+          password: formData.password
+        };
         
-        // Mock successful login
-        console.log('Login successful');
-        localStorage.setItem('userToken', 'mock-token-12345');
-        navigate('/');
+        console.log('Login data:', loginData);
+        
+        response = await axios.post(`${API_URL}/api/v1/accounts/login/`, loginData, {
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        console.log('Login response:', response.data);
+        
+        // Check if the response has the expected structure based on your API
+        if (response.data?.data?.access) {
+          // Store tokens in localStorage
+          localStorage.setItem('token', response.data.data.access);
+          
+          if (response.data.data.refresh) {
+            localStorage.setItem('refreshToken', response.data.data.refresh);
+          }
+          
+          // Store user information if available
+          if (response.data.data.user) {
+            localStorage.setItem('user', JSON.stringify(response.data.data.user));
+          }
+          
+          console.log('Login successful');
+          navigate(redirect);
+        } else if (response.data?.success === false) {
+          // Handle unsuccessful login from your API
+          setError(response.data.message || 'Login failed');
+        } else {
+          // If the response structure doesn't match what we expect
+          console.error('Unexpected response structure:', response.data);
+          setError('Login failed - unexpected server response');
+        }
+        
       } else {
         // Register request
-        // const response = await axios.post('/api/users/register', {
-        //   name: formData.name,
-        //   email: formData.email,
-        //   password: formData.password
-        // });
+        const registerData = {
+          username: formData.username,
+          email: formData.email,
+          password: formData.password
+        };
         
-        // Mock successful registration
-        console.log('Registration successful');
-        localStorage.setItem('userToken', 'mock-token-12345');
-        navigate('/');
+        console.log('Register data:', registerData);
+        
+        response = await axios.post(`${API_URL}/api/v1/accounts/register/`, registerData, {
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        console.log('Registration response:', response.data);
+        
+        // Check response structure
+        if (response.data?.success === true) {
+          console.log('Registration successful');
+          
+          // If tokens are returned immediately after registration
+          if (response.data.data?.access) {
+            localStorage.setItem('token', response.data.data.access);
+            
+            if (response.data.data.refresh) {
+              localStorage.setItem('refreshToken', response.data.data.refresh);
+            }
+            
+            if (response.data.data.user) {
+              localStorage.setItem('user', JSON.stringify(response.data.data.user));
+            }
+            
+            navigate(redirect);
+          } else {
+            // If not immediately logged in, redirect to login
+            navigate('/login?registered=true');
+          }
+        } else if (response.data?.success === false) {
+          // API returned an error message
+          setError(response.data.message || 'Registration failed');
+          
+          // If there are field-specific errors
+          if (response.data.errors) {
+            const errorMessages = [];
+            Object.entries(response.data.errors).forEach(([field, errors]) => {
+              if (Array.isArray(errors)) {
+                errorMessages.push(`${field}: ${errors.join(' ')}`);
+              } else {
+                errorMessages.push(`${field}: ${errors}`);
+              }
+            });
+            
+            if (errorMessages.length > 0) {
+              setError(errorMessages.join('. '));
+            }
+          }
+        } else {
+          // If the response structure doesn't match what we expect
+          console.error('Unexpected response structure:', response.data);
+          setError('Registration failed - unexpected server response');
+        }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'An error occurred');
+      console.error('Auth error:', err);
+      
+      // Detailed error logging
+      if (err.response) {
+        console.error('Error response data:', err.response.data);
+        console.error('Error response status:', err.response.status);
+        console.error('Error response headers:', err.response.headers);
+        
+        // Handle different error status codes
+        if (err.response.status === 400) {
+          // Bad Request - likely validation errors
+          if (err.response.data?.errors) {
+            const errorMessages = [];
+            
+            Object.entries(err.response.data.errors).forEach(([field, errors]) => {
+              if (Array.isArray(errors)) {
+                errorMessages.push(`${field}: ${errors.join(' ')}`);
+              } else if (typeof errors === 'string') {
+                errorMessages.push(`${field}: ${errors}`);
+              } else {
+                errorMessages.push(`${field}: Invalid input`);
+              }
+            });
+            
+            if (errorMessages.length > 0) {
+              setError(errorMessages.join('. '));
+            } else {
+              setError(err.response.data.message || 'Validation error');
+            }
+          } else {
+            setError(err.response.data.message || 'Invalid request data');
+          }
+        } else if (err.response.status === 401) {
+          // Unauthorized - wrong credentials
+          setError('Invalid email or password');
+        } else if (err.response.status === 403) {
+          // Forbidden - CSRF or permissions issue
+          setError('Access denied. Please try again later.');
+        } else if (err.response.status === 404) {
+          // Not Found - wrong endpoint
+          setError('Service unavailable. Please try again later.');
+        } else if (err.response.status === 405) {
+          // Method Not Allowed
+          setError('Invalid request method. Please try again later.');
+          console.error('You are likely using the wrong HTTP method (GET vs POST)');
+        } else if (err.response.status === 500) {
+          // Server Error
+          setError('Server error. Please try again later.');
+        } else {
+          // Other error
+          setError(`Error: ${err.response.data.message || 'Authentication failed'}`);
+        }
+      } else if (err.request) {
+        // No response received
+        console.error('No response received:', err.request);
+        setError('No response from server. Please check your internet connection.');
+      } else {
+        // Error setting up request
+        console.error('Error message:', err.message);
+        setError('Failed to send request.');
+      }
     } finally {
       setLoading(false);
     }
@@ -76,11 +247,10 @@ const AuthPage = () => {
   // Update switch button handler to change URL
   const handleSwitchMode = () => {
     if (isLogin) {
-      navigate('/register');
+      navigate(`/register${redirect !== '/' ? `?redirect=${redirect}` : ''}`);
     } else {
-      navigate('/login');
+      navigate(`/login${redirect !== '/' ? `?redirect=${redirect}` : ''}`);
     }
-    // No need to call setIsLogin here as the useEffect will handle that based on URL
   };
 
   return (
@@ -89,17 +259,24 @@ const AuthPage = () => {
         <div className="auth-form-container">
           <h1>{isLogin ? 'Login' : 'Create an Account'}</h1>
           
+          {/* Show success message if redirected from registration */}
+          {searchParams.get('registered') === 'true' && (
+            <div className="success-message">
+              Registration successful! Please log in with your credentials.
+            </div>
+          )}
+          
           {error && <div className="error-message">{error}</div>}
           
           <form onSubmit={handleSubmit}>
             {!isLogin && (
               <div className="form-group">
-                <label htmlFor="name">Full Name</label>
+                <label htmlFor="username">Username</label>
                 <input
                   type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
+                  id="username"
+                  name="username"
+                  value={formData.username}
                   onChange={handleChange}
                   required={!isLogin}
                 />
@@ -158,6 +335,12 @@ const AuthPage = () => {
               {isLogin ? 'Register' : 'Login'}
             </button>
           </div>
+          
+          {isLogin && (
+            <div className="forgot-password">
+              <a href="/forgot-password">Forgot your password?</a>
+            </div>
+          )}
         </div>
         
         <div className="auth-info">

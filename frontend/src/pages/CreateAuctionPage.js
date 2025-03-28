@@ -3,21 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/CreateAuctionPage.css';
 
+// API base URL from environment variable
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const CreateAuctionPage = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    category: '',
-    startingBid: '',
-    minBidIncrement: '',
+    category_id: '',
+    starting_price: '',
+    min_bid_increment: '',
     duration: '7',
     condition: 'new',
     location: '',
     images: [],
-    shippingOptions: [{ method: 'Standard Shipping', cost: '' }],
-    paymentMethods: ['Credit Card', 'PayPal'],
-    returnPolicy: ''
+    shipping_options: [{ method: 'Standard Shipping', cost: '' }],
+    payment_methods: ['Credit Card', 'PayPal'],
+    return_policy: ''
   });
   const [categories, setCategories] = useState([]);
   const [previewImages, setPreviewImages] = useState([]);
@@ -54,7 +57,7 @@ const CreateAuctionPage = () => {
   
   // Handle shipping option changes
   const handleShippingChange = (index, field, value) => {
-    const updatedShipping = [...formData.shippingOptions];
+    const updatedShipping = [...formData.shipping_options];
     updatedShipping[index] = {
       ...updatedShipping[index],
       [field]: value
@@ -62,7 +65,7 @@ const CreateAuctionPage = () => {
     
     setFormData({
       ...formData,
-      shippingOptions: updatedShipping
+      shipping_options: updatedShipping
     });
   };
   
@@ -70,8 +73,8 @@ const CreateAuctionPage = () => {
   const addShippingOption = () => {
     setFormData({
       ...formData,
-      shippingOptions: [
-        ...formData.shippingOptions,
+      shipping_options: [
+        ...formData.shipping_options,
         { method: '', cost: '' }
       ]
     });
@@ -79,12 +82,12 @@ const CreateAuctionPage = () => {
   
   // Remove a shipping option
   const removeShippingOption = (index) => {
-    const updatedShipping = [...formData.shippingOptions];
+    const updatedShipping = [...formData.shipping_options];
     updatedShipping.splice(index, 1);
     
     setFormData({
       ...formData,
-      shippingOptions: updatedShipping
+      shipping_options: updatedShipping
     });
   };
   
@@ -93,14 +96,14 @@ const CreateAuctionPage = () => {
     let updatedPayments;
     
     if (checked) {
-      updatedPayments = [...formData.paymentMethods, method];
+      updatedPayments = [...formData.payment_methods, method];
     } else {
-      updatedPayments = formData.paymentMethods.filter(item => item !== method);
+      updatedPayments = formData.payment_methods.filter(item => item !== method);
     }
     
     setFormData({
       ...formData,
-      paymentMethods: updatedPayments
+      payment_methods: updatedPayments
     });
   };
   
@@ -111,13 +114,13 @@ const CreateAuctionPage = () => {
     setLoading(true);
     
     // Validation
-    if (parseFloat(formData.startingBid) <= 0) {
+    if (parseFloat(formData.starting_price) <= 0) {
       setError('Starting bid must be greater than zero');
       setLoading(false);
       return;
     }
     
-    if (parseFloat(formData.minBidIncrement) <= 0) {
+    if (parseFloat(formData.min_bid_increment) <= 0) {
       setError('Minimum bid increment must be greater than zero');
       setLoading(false);
       return;
@@ -130,43 +133,76 @@ const CreateAuctionPage = () => {
     }
     
     try {
-      // In a real app, create form data and send to API
+      // Create form data for API
       const auctionData = new FormData();
       
+      // Calculate end date based on duration
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + parseInt(formData.duration));
+      
       // Add text fields
-      for (const key in formData) {
-        if (key !== 'images' && key !== 'shippingOptions' && key !== 'paymentMethods') {
-          auctionData.append(key, formData[key]);
-        }
-      }
+      auctionData.append('title', formData.title);
+      auctionData.append('description', formData.description);
+      auctionData.append('category_id', formData.category_id);
+      auctionData.append('starting_price', formData.starting_price);
+      auctionData.append('min_bid_increment', formData.min_bid_increment);
+      auctionData.append('condition', formData.condition);
+      auctionData.append('location', formData.location);
+      auctionData.append('end_time', endDate.toISOString());
+      auctionData.append('return_policy', formData.return_policy);
       
       // Add JSON fields
-      auctionData.append('shippingOptions', JSON.stringify(formData.shippingOptions));
-      auctionData.append('paymentMethods', JSON.stringify(formData.paymentMethods));
+      auctionData.append('shipping_options', JSON.stringify(formData.shipping_options));
+      auctionData.append('payment_methods', JSON.stringify(formData.payment_methods));
       
       // Add image files
-      formData.images.forEach(image => {
-        auctionData.append('images', image);
+      formData.images.forEach((image, index) => {
+        auctionData.append(`images[${index}]`, image);
       });
       
-      // Call API (commented out for mock)
-      // const response = await axios.post('/api/auctions', auctionData, {
-      //   headers: {
-      //     'Content-Type': 'multipart/form-data'
-      //   }
-      // });
+      // Get the authentication token
+      const token = localStorage.getItem('token');
       
-      // Mock successful creation
-      console.log('Auction created successfully', formData);
+      if (!token) {
+        navigate('/login?redirect=create-auction');
+        return;
+      }
       
-      // Redirect to auction page (in a real app, would redirect to the new auction page)
-      setTimeout(() => {
-        navigate('/auctions');
-      }, 1000);
+      // Call API
+      const response = await axios.post(`${API_URL}/api/v1/auctions/auctions/`, auctionData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('Auction created successfully', response.data);
+      
+      // Redirect to the new auction page
+      navigate(`/auction/${response.data.data.id}`);
       
     } catch (error) {
       console.error('Error creating auction:', error);
-      setError('Failed to create auction. Please try again.');
+      
+      // Handle different types of errors
+      if (error.response) {
+        // The request was made and the server responded with a status code outside of 2xx
+        if (error.response.status === 401) {
+          setError('You must be logged in to create an auction');
+          navigate('/login?redirect=create-auction');
+        } else if (error.response.data && error.response.data.message) {
+          setError(error.response.data.message);
+        } else {
+          setError('Failed to create auction. Please try again.');
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        setError('No response from server. Please check your internet connection and try again.');
+      } else {
+        // Something happened in setting up the request
+        setError('Failed to create auction. Please try again.');
+      }
+      
       setLoading(false);
     }
   };
@@ -175,12 +211,27 @@ const CreateAuctionPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        // In a real app, fetch from API
-        // const response = await axios.get('/api/categories');
-        // setCategories(response.data);
+        // Real API call to fetch categories
+        const response = await axios.get(`${API_URL}/api/v1/auctions/categories/all/`);
         
-        // Mock categories
-        const mockCategories = [
+        // Check if data exists and has the expected structure
+        if (response.data && response.data.data && response.data.data.categories) {
+          setCategories(response.data.data.categories);
+        } else {
+          // Fallback to mock data if response format is unexpected
+          console.warn('Unexpected API response format. Using mock data.');
+          setCategories([
+            { id: 1, name: 'Electronics' },
+            { id: 2, name: 'Collectibles' },
+            { id: 3, name: 'Fashion' },
+            { id: 4, name: 'Home & Garden' },
+            { id: 5, name: 'Vehicles' }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        // Use mock data as fallback
+        setCategories([
           { id: 1, name: 'Electronics' },
           { id: 2, name: 'Collectibles' },
           { id: 3, name: 'Fashion' },
@@ -191,18 +242,15 @@ const CreateAuctionPage = () => {
           { id: 8, name: 'Books & Magazines' },
           { id: 9, name: 'Sports Equipment' },
           { id: 10, name: 'Toys & Hobbies' }
-        ];
-        
-        setCategories(mockCategories);
-      } catch (error) {
-        console.error('Error fetching categories:', error);
+        ]);
       }
     };
     
     // Check if user is logged in
-    const token = localStorage.getItem('userToken');
+    const token = localStorage.getItem('token');
     if (!token) {
-      navigate('/login');
+      // Redirect to login with return URL
+      navigate('/login?redirect=create-auction');
       return;
     }
     
@@ -249,11 +297,11 @@ const CreateAuctionPage = () => {
             
             <div className="form-row">
               <div className="form-group half">
-                <label htmlFor="category">Category*</label>
+                <label htmlFor="category_id">Category*</label>
                 <select
-                  id="category"
-                  name="category"
-                  value={formData.category}
+                  id="category_id"
+                  name="category_id"
+                  value={formData.category_id}
                   onChange={handleChange}
                   required
                 >
@@ -284,6 +332,18 @@ const CreateAuctionPage = () => {
                 </select>
               </div>
             </div>
+            
+            <div className="form-group">
+              <label htmlFor="location">Item Location</label>
+              <input
+                type="text"
+                id="location"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                placeholder="City, State or Country"
+              />
+            </div>
           </div>
           
           <div className="form-section">
@@ -291,12 +351,12 @@ const CreateAuctionPage = () => {
             
             <div className="form-row">
               <div className="form-group half">
-                <label htmlFor="startingBid">Starting Bid*</label>
+                <label htmlFor="starting_price">Starting Bid*</label>
                 <input
                   type="number"
-                  id="startingBid"
-                  name="startingBid"
-                  value={formData.startingBid}
+                  id="starting_price"
+                  name="starting_price"
+                  value={formData.starting_price}
                   onChange={handleChange}
                   required
                   min="0.01"
@@ -306,12 +366,12 @@ const CreateAuctionPage = () => {
               </div>
               
               <div className="form-group half">
-                <label htmlFor="minBidIncrement">Minimum Bid Increment*</label>
+                <label htmlFor="min_bid_increment">Minimum Bid Increment*</label>
                 <input
                   type="number"
-                  id="minBidIncrement"
-                  name="minBidIncrement"
-                  value={formData.minBidIncrement}
+                  id="min_bid_increment"
+                  name="min_bid_increment"
+                  value={formData.min_bid_increment}
                   onChange={handleChange}
                   required
                   min="0.01"
@@ -342,7 +402,7 @@ const CreateAuctionPage = () => {
             
             <div className="form-group">
               <label>Shipping Options</label>
-              {formData.shippingOptions.map((option, index) => (
+              {formData.shipping_options.map((option, index) => (
                 <div key={index} className="shipping-option">
                   <input
                     type="text"
@@ -356,9 +416,11 @@ const CreateAuctionPage = () => {
                     value={option.cost}
                     onChange={(e) => handleShippingChange(index, 'cost', e.target.value)}
                   />
-                  <button type="button" onClick={() => removeShippingOption(index)}>
-                    Remove
-                  </button>
+                  {formData.shipping_options.length > 1 && (
+                    <button type="button" onClick={() => removeShippingOption(index)}>
+                      Remove
+                    </button>
+                  )}
                 </div>
               ))}
               <button type="button" onClick={addShippingOption}>
@@ -372,7 +434,7 @@ const CreateAuctionPage = () => {
                 <div key={method}>
                   <input
                     type="checkbox"
-                    checked={formData.paymentMethods.includes(method)}
+                    checked={formData.payment_methods.includes(method)}
                     onChange={(e) => handlePaymentChange(method, e.target.checked)}
                   />
                   <label>{method}</label>
@@ -385,7 +447,15 @@ const CreateAuctionPage = () => {
             <h2>Images</h2>
             
             <div className="form-group">
-              <input type="file" multiple accept="image/*" onChange={handleImageChange} />
+              <label>Upload Images (Max 5)*</label>
+              <input 
+                type="file" 
+                multiple 
+                accept="image/*" 
+                onChange={handleImageChange} 
+                required={previewImages.length === 0}
+              />
+              <p className="form-hint">First image will be used as the main image</p>
               <div className="image-preview">
                 {previewImages.map((src, index) => (
                   <img key={index} src={src} alt={`Preview ${index}`} />
@@ -397,9 +467,9 @@ const CreateAuctionPage = () => {
           <div className="form-section">
             <h2>Return Policy</h2>
             <textarea
-              id="returnPolicy"
-              name="returnPolicy"
-              value={formData.returnPolicy}
+              id="return_policy"
+              name="return_policy"
+              value={formData.return_policy}
               onChange={handleChange}
               rows="4"
               placeholder="Describe your return policy (if any)"

@@ -141,6 +141,49 @@ class UserPasswordChangeSerializer(serializers.Serializer):
         return attrs
 
 
+class UserLoginSerializer(serializers.Serializer):
+    """Serializer for user login endpoint"""
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(
+        required=True,
+        style={'input_type': 'password'},
+        write_only=True
+    )
+
+    def validate(self, attrs):
+        email = attrs.get('email', '').lower()
+        password = attrs.get('password', '')
+
+        if not email or not password:
+            raise serializers.ValidationError(
+                {'error': 'Please provide both email and password'}
+            )
+
+        # Check if user exists
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                {'email': 'No user found with this email address'}
+            )
+
+        # Check password
+        if not user.check_password(password):
+            raise serializers.ValidationError(
+                {'password': 'Invalid password'}
+            )
+
+        # Check if user is active
+        if not user.is_active:
+            raise serializers.ValidationError(
+                {'error': 'User account is disabled'}
+            )
+
+        # Return validated data
+        attrs['user'] = user
+        return attrs
+
+
 class AddressSerializer(serializers.ModelSerializer):
     """Serializer for user addresses"""
 

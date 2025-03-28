@@ -3,48 +3,93 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/HomePage.css';
 
+// Create an API base URL - in production, use environment variable
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+// Create a simple API service for this component
+const api = {
+  getFeaturedAuctions: () => axios.get(`${API_URL}/api/v1/auctions/auctions/`, { 
+    params: { featured: true, limit: 3 } 
+  }),
+  getCategories: () => axios.get(`${API_URL}/api/v1/auctions/categories/all/`)
+};
+
 const HomePage = () => {
   const [featuredAuctions, setFeaturedAuctions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch featured auctions
-        const auctionsResponse = await axios.get('/api/auctions/featured');
-        setFeaturedAuctions(auctionsResponse.data);
+        setLoading(true);
         
-        // Fetch categories
-        const categoriesResponse = await axios.get('/api/categories');
-        setCategories(categoriesResponse.data);
+        // Make parallel API requests
+        const [auctionsResponse, categoriesResponse] = await Promise.all([
+          api.getFeaturedAuctions(),
+          api.getCategories()
+        ]);
         
+        // Process auction data from the API
+        const auctionsData = auctionsResponse.data.data?.auctions || [];
+        const processedAuctions = auctionsData.map(auction => ({
+          id: auction.id,
+          title: auction.title,
+          currentBid: auction.current_price || auction.starting_price,
+          image: auction.item_data?.image_urls?.[0] || 'https://picsum.photos/id/28/300/200',
+          endsAt: auction.end_time
+        }));
+        
+        // Process category data from the API
+        const categoriesData = categoriesResponse.data.data?.categories || [];
+        const categoryIcons = {
+          'Electronics': '💻',
+          'Collectibles': '🏆',
+          'Fashion': '👕',
+          'Home & Garden': '🏡',
+          'Vehicles': '🚗',
+          'Art': '🎨',
+          'Jewelry': '💍',
+          'Books': '📚',
+          'Sports': '⚽',
+          'Toys': '🧸'
+        };
+        
+        const processedCategories = categoriesData.map(category => ({
+          id: category.id,
+          name: category.name,
+          icon: categoryIcons[category.name] || '📦'
+        }));
+        
+        setFeaturedAuctions(processedAuctions);
+        setCategories(processedCategories);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
+        setError('Could not load data from the server. Showing sample data instead.');
+        
+        // Mock data as fallback
+        setFeaturedAuctions([
+          { id: 1, title: 'Vintage Watch Collection', currentBid: 1200, image: 'https://picsum.photos/id/28/300/200', endsAt: new Date(Date.now() + 86400000).toISOString() },
+          { id: 2, title: 'Gaming Console Bundle', currentBid: 450, image: 'https://picsum.photos/id/96/300/200', endsAt: new Date(Date.now() + 172800000).toISOString() },
+          { id: 3, title: 'Antique Furniture Set', currentBid: 850, image: 'https://picsum.photos/id/116/300/200', endsAt: new Date(Date.now() + 259200000).toISOString() },
+        ]);
+        
+        setCategories([
+          { id: 1, name: 'Electronics', icon: '💻' },
+          { id: 2, name: 'Collectibles', icon: '🏆' },
+          { id: 3, name: 'Fashion', icon: '👕' },
+          { id: 4, name: 'Home & Garden', icon: '🏡' },
+          { id: 5, name: 'Vehicles', icon: '🚗' },
+        ]);
+        
         setLoading(false);
       }
     };
 
-    // For now, we'll just use mock data instead of making the API call
-    // fetchData();
-    
-    // Mock data
-    setFeaturedAuctions([
-      { id: 1, title: 'Vintage Watch Collection', currentBid: 1200, image: 'https://picsum.photos/id/28/300/200', endsAt: new Date(Date.now() + 86400000).toISOString() },
-      { id: 2, title: 'Gaming Console Bundle', currentBid: 450, image: 'https://picsum.photos/id/96/300/200', endsAt: new Date(Date.now() + 172800000).toISOString() },
-      { id: 3, title: 'Antique Furniture Set', currentBid: 850, image: 'https://picsum.photos/id/116/300/200', endsAt: new Date(Date.now() + 259200000).toISOString() },
-    ]);
-    
-    setCategories([
-      { id: 1, name: 'Electronics', icon: '💻' },
-      { id: 2, name: 'Collectibles', icon: '🏆' },
-      { id: 3, name: 'Fashion', icon: '👕' },
-      { id: 4, name: 'Home & Garden', icon: '🏡' },
-      { id: 5, name: 'Vehicles', icon: '🚗' },
-    ]);
-    
-    setLoading(false);
+    // Call the function to fetch data
+    fetchData();
   }, []);
 
   // Helper function to format time remaining
@@ -75,32 +120,43 @@ const HomePage = () => {
         </div>
       </section>
 
+      {/* Display error message if API call failed */}
+      {error && (
+        <div className="container error-banner">
+          <p>{error}</p>
+        </div>
+      )}
+
       {/* Featured auctions section */}
       <section className="featured-section">
         <div className="container">
           <h2>Featured Auctions</h2>
-          <div className="auction-grid">
-            {loading ? (
+          {loading ? (
+            <div className="loading-container">
               <p>Loading featured auctions...</p>
-            ) : (
-              featuredAuctions.map(auction => (
-                <div key={auction.id} className="auction-card">
-                  <div className="auction-image">
-                    <img src={auction.image} alt={auction.title} />
+            </div>
+          ) : (
+            <>
+              <div className="auction-grid">
+                {featuredAuctions.map(auction => (
+                  <div key={auction.id} className="auction-card">
+                    <div className="auction-image">
+                      <img src={auction.image} alt={auction.title} />
+                    </div>
+                    <div className="auction-details">
+                      <h3>{auction.title}</h3>
+                      <p className="current-bid">Current Bid: ${auction.currentBid.toFixed(2)}</p>
+                      <p className="time-remaining">{formatTimeRemaining(auction.endsAt)}</p>
+                      <Link to={`/auction/${auction.id}`} className="btn btn-outline">View Auction</Link>
+                    </div>
                   </div>
-                  <div className="auction-details">
-                    <h3>{auction.title}</h3>
-                    <p className="current-bid">Current Bid: ${auction.currentBid}</p>
-                    <p className="time-remaining">{formatTimeRemaining(auction.endsAt)}</p>
-                    <Link to={`/auction/${auction.id}`} className="btn btn-outline">View Auction</Link>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          <div className="view-all-container">
-            <Link to="/auctions" className="view-all">View All Auctions →</Link>
-          </div>
+                ))}
+              </div>
+              <div className="view-all-container">
+                <Link to="/auctions" className="view-all">View All Auctions →</Link>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
@@ -108,14 +164,20 @@ const HomePage = () => {
       <section className="categories-section">
         <div className="container">
           <h2>Explore Categories</h2>
-          <div className="categories-grid">
-            {categories.map(category => (
-              <Link to={`/category/${category.id}`} key={category.id} className="category-card">
-                <div className="category-icon">{category.icon}</div>
-                <h3>{category.name}</h3>
-              </Link>
-            ))}
-          </div>
+          {loading ? (
+            <div className="loading-container">
+              <p>Loading categories...</p>
+            </div>
+          ) : (
+            <div className="categories-grid">
+              {categories.map(category => (
+                <Link to={`/category/${category.id}`} key={category.id} className="category-card">
+                  <div className="category-icon">{category.icon}</div>
+                  <h3>{category.name}</h3>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

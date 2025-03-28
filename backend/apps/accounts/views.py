@@ -21,6 +21,7 @@ from .serializers import (
     UserProfileBasicSerializer,
     UserRegistrationSerializer,
     WalletSerializer,
+    UserLoginSerializer,
 )
 
 from django.utils import timezone
@@ -121,9 +122,9 @@ class CustomTokenRefreshView(ApiResponseMixin, TokenRefreshView):
 
 
 class UserRegistrationView(ApiResponseMixin, generics.CreateAPIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.AllowAny]  # Allow anyone to register
     serializer_class = UserRegistrationSerializer
-
+    
     @swagger_auto_schema(
         operation_summary="Register new user",
         operation_description="Create a new user account",
@@ -132,25 +133,81 @@ class UserRegistrationView(ApiResponseMixin, generics.CreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
+        
         if serializer.is_valid():
+            # Create the user
             user = serializer.save()
-
+            
+            # Generate tokens for the user
             refresh = RefreshToken.for_user(user)
-
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            
+            # Return success response with tokens
             return api_response(
-                data={
-                    "user": UserProfileBasicSerializer(user).data,
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token),
-                },
+                success=True,
                 message="User registered successfully",
+                data={
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                    },
+                    "access": access_token,
+                    "refresh": refresh_token,
+                },
                 status=status.HTTP_201_CREATED,
             )
+        
         return api_response(
             success=False,
             message="Registration failed",
             errors=serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class UserLoginView(ApiResponseMixin, generics.GenericAPIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = UserLoginSerializer
+    
+    @swagger_auto_schema(
+        operation_summary="User login",
+        operation_description="Authenticate user and get tokens",
+        responses={200: "Login successful"},
+        tags=["Authentication"],
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            
+            # Generate tokens
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            
+            return api_response(
+                success=True,
+                message="Login successful",
+                data={
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                    },
+                    "access": access_token,
+                    "refresh": refresh_token,
+                },
+                status=status.HTTP_200_OK,
+            )
+        
+        return api_response(
+            success=False,
+            message="Invalid credentials",
+            errors=serializer.errors,
+            status=status.HTTP_401_UNAUTHORIZED,
         )
 
 
