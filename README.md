@@ -1,26 +1,48 @@
-# Auction House Backend
+# Online Auction System
 
-This is the backend API for an Auction House platform built with Django.
+A comprehensive auction platform with Django backend and React frontend.
 
 ## Current Progress
 
-The backend currently has the following features implemented:
+The system currently has the following features implemented:
 
 - **Authentication System**:
   - JWT-based authentication with token refresh and blacklisting
   - User registration and login
   - Password change functionality
-  - User profiles with different roles (Admin, Staff, Buyer, Seller)
+  - User profiles with different roles (Admin, Staff, User)
 
 - **User Management**:
-  - User profile viewing and editing
+  - User profile viewing and editing (personal information, avatar)
   - Address management (create, read, update, delete)
   - Payment method management
   - Default address and payment method selection
+  - Account deletion functionality
+  - Profile picture/avatar uploading
+
+- **Wallet & Transactions**:
+  - User wallet creation and management
+  - Transaction history tracking
+  - Fund deposits and withdrawals
 
 - **Admin Functions**:
   - User management dashboard
-  - View and manage all addresses and payment methods
+  - View and manage all users, addresses and payment methods
+  - Activate/deactivate user accounts
+  - Change user roles (admin, staff, user)
+  - Create new users with specific roles
+  - Add funds to user wallets
+  - View user transaction history
+
+- **Notifications System**:
+  - Notification preferences for users
+  - In-app notifications
+
+- **Frontend Interface**:
+  - User profile management
+  - Profile editing
+  - Password changing
+  - Responsive design
 
 ## Setup Instructions
 
@@ -28,30 +50,35 @@ The backend currently has the following features implemented:
 
 - Python 3.x
 - Docker and Docker Compose (for PostgreSQL)
+- Node.js and npm (for frontend)
 - pip
 - python-dotenv (for environment variable management)
 
 ### Environment Setup
 
-1. Clone the repository (if you haven't already)
+1. Clone the repository
    ```bash
    git clone [repository-url]
-   cd backend
    ```
 
-2. Create and activate a virtual environment
+2. Backend setup
    ```bash
+   cd backend
    python -m venv venv
    venv\Scripts\activate
+   pip install -r requirements.txt
    ```
 
-3. Install dependencies
+3. Frontend setup
    ```bash
-   pip install -r requirements.txt
+   cd frontend
+   npm install
    ```
 
 4. Set up environment variables
    ```bash
+   # For backend
+   cd backend
    # Initialize the environment setup (creates .env from .env.example if needed)
    make env-setup
    
@@ -134,10 +161,20 @@ make help
 
 Start the Django development server:
 ```bash
+# Backend
+cd backend
 make run
 ```
 
+Start the React development server:
+```bash
+# Frontend
+cd frontend
+npm start
+```
+
 The API will be available at http://127.0.0.1:8000/
+The frontend will be available at http://localhost:3000/
 
 ## Environment Variables
 
@@ -157,18 +194,21 @@ Key environment variables:
 Once the server is running, you can access the API documentation at:
 - Swagger UI: http://127.0.0.1:8000/swagger/
 - ReDoc: http://127.0.0.1:8000/redoc/
+- Postman
 
 ## Next Steps / Coming Soon
 
-- Product listings and categories
 - Auction functionality with bidding
-- Order processing
-- Payment integration
-- Notifications system
+- Item listings and categories
 - Search and filter functionality
+- Order processing and tracking
+- Payment gateway integration
+- Enhanced notification system
 
 ## Notes
 
 - The project uses Django's built-in authentication system with a custom User model
 - JWT tokens are configured to expire after 60 minutes, with refresh tokens valid for 14 days
 - Robust validation is implemented for user data including emails and phone numbers
+- User accounts have wallet functionality for handling transactions
+- Admin users can manage other users including activating/deactivating accounts and changing roles
