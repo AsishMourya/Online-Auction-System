@@ -12,7 +12,10 @@ const AuctionDetailPage = () => {
   const [bidSuccess, setBidSuccess] = useState(false);
   const [bids, setBids] = useState([]);
   const [timeLeft, setTimeLeft] = useState('');
-  
+  const [activeTab, setActiveTab] = useState('Description');
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+  };
   // Check if user is logged in (would use context in a real app)
   const isLoggedIn = localStorage.getItem('userToken') !== null;
 
@@ -296,19 +299,18 @@ const AuctionDetailPage = () => {
         
         <div className="auction-tabs">
           <div className="tabs-header">
-            <button className="tab-btn active">Description</button>
-            <button className="tab-btn">Shipping & Payment</button>
-            <button className="tab-btn">Bid History</button>
+            <button onClick={() => { handleTabChange("Description") }} className={`tab-btn ${activeTab==="Description"?"active":""}`}>Description</button>
+            <button onClick={()=>{handleTabChange("Shipping & Payment")}} className={`tab-btn ${activeTab==="Shipping & Payment"?"active":""}`}>Shipping & Payment</button>
+            <button onClick={()=>{handleTabChange("Bid History")}} className={`tab-btn ${activeTab==="Bid History"?"active":""}`}>Bid History</button>
           </div>
           
-          <div className="tab-content">
+          {activeTab === "Description" && <div className="tab-content">
             <div className="tab-pane active">
-              <h3>Item Description</h3>
               <p>{auction.description}</p>
             </div>
-          </div>
+          </div>}
           
-          <div className="shipping-payment">
+          { activeTab === "Shipping & Payment" && <div className="shipping-payment">
             <h3>Shipping Options</h3>
             <ul className="shipping-list">
               {auction.shippingOptions.map((option, index) => (
@@ -327,10 +329,9 @@ const AuctionDetailPage = () => {
             
             <h3>Return Policy</h3>
             <p>{auction.returnPolicy}</p>
-          </div>
+          </div>}
           
-          <div className="bid-history">
-            <h3>Bid History</h3>
+          { activeTab === "Bid History"&& <div className="bid-history">
             {bids.length === 0 ? (
               <p>No bids have been placed yet.</p>
             ) : (
@@ -353,7 +354,7 @@ const AuctionDetailPage = () => {
                 </tbody>
               </table>
             )}
-          </div>
+          </div>}
         </div>
         
         <div className="similar-auctions">
