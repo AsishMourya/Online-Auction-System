@@ -2,11 +2,13 @@ from django.db import transaction
 from django.utils import timezone
 from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
+from django.urls import get_resolver
+from django.http import JsonResponse
 
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -33,16 +35,17 @@ class CategoryViewSet(ApiResponseMixin, viewsets.ModelViewSet):
 
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    # Allow anyone to view categories
+    permission_classes = [permissions.AllowAny]
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "description"]
 
     def get_permissions(self):
-        """Only admins can create, update or delete categories"""
+        """Only admins can create, update or delete categories, anyone can view"""
         if self.action in ["create", "update", "partial_update", "destroy"]:
             self.permission_classes = [permissions.IsAuthenticated, IsAdmin]
         else:
-            self.permission_classes = [permissions.IsAuthenticated]
+            self.permission_classes = [permissions.AllowAny]
         return super().get_permissions()
 
     @swagger_auto_schema(
@@ -126,35 +129,37 @@ class AuctionViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet
     """API endpoints for managing auctions"""
 
     serializer_class = AuctionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [
-        DjangoFilterBackend,
-        filters.SearchFilter,
-        filters.OrderingFilter,
-    ]
-    filterset_fields = ["status", "auction_type", "seller"]
-    search_fields = ["title", "description", "item__name"]
-    ordering_fields = ["start_time", "end_time", "starting_price", "current_price"]
+    # Change permission to AllowAny for list and retrieve
+    permission_classes = [permissions.AllowAny]
 
+    # Update the get_permissions method
+    def get_permissions(self):
+        """Only require authentication for creating, updating, deleting auctions"""
+        if self.action in ["create", "update", "partial_update", "destroy", "my_auctions", "watch", "unwatch", "watched"]:
+            self.permission_classes = [permissions.IsAuthenticated]
+        else:
+            self.permission_classes = [permissions.AllowAny]
+        return super().get_permissions()
+
+    # Update the get_queryset method
     def get_queryset(self):
         if self.is_swagger_request:
             return self.get_swagger_empty_queryset()
 
-        """Return all active auctions + user's own auctions"""
+        """Return all active auctions + user's own auctions if authenticated"""
         user = self.request.user
 
+        # For unauthenticated users, only show active auctions
+        if not user.is_authenticated:
+            return Auction.objects.filter(status=Auction.STATUS_ACTIVE).select_related("seller", "item")
+
+        # For authenticated users, also show their own auctions
         if self.action in ["list", "retrieve"]:
             return Auction.objects.filter(
                 Q(status=Auction.STATUS_ACTIVE) | Q(seller=user)
             ).select_related("seller", "item")
 
         return Auction.objects.filter(seller=user)
-
-    def get_permissions(self):
-        """Only allow users to update or delete their own auctions"""
-        if self.action in ["update", "partial_update", "destroy"]:
-            self.permission_classes = [permissions.IsAuthenticated]
-        return super().get_permissions()
 
     @swagger_auto_schema(
         operation_id="list_auctions",
@@ -183,15 +188,23 @@ class AuctionViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet
             end_soon_threshold = timezone.now() + timezone.timedelta(hours=24)
             queryset = queryset.filter(end_time__lte=end_soon_threshold)
 
+        featured = request.query_params.get('featured', None)
+        if featured and featured.lower() == 'true':
+            queryset = queryset.filter(is_featured=True)
+
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return api_response(
-            data=serializer.data, message="Auctions retrieved successfully"
-        )
+        return Response({
+            'success': True,
+            'data': {
+                'auctions': serializer.data,
+                'count': queryset.count()
+            }
+        })
 
     @swagger_auto_schema(
         operation_id="create_auction",
@@ -519,8 +532,15 @@ class AuctionViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet
 class BidViewSet(viewsets.ModelViewSet):
     """ViewSet for managing bids"""
     serializer_class = BidSerializer
-    permission_classes = [permissions.IsAuthenticated]
     
+    def get_permissions(self):
+        """Allow anyone to view bids, but only authenticated users can create them"""
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            self.permission_classes = [permissions.IsAuthenticated]
+        else:
+            self.permission_classes = [permissions.AllowAny]
+        return super().get_permissions()
+        
     def get_queryset(self):
         """Filter bids by auction_id if provided"""
         queryset = Bid.objects.all()
@@ -674,7 +694,7 @@ def search_items(request):
 
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([AllowAny])  # Changed from IsAuthenticated to AllowAny
 @swagger_auto_schema(
     operation_id="list_all_categories",
     operation_summary="List all categories",
@@ -699,10 +719,6 @@ class AutoBidViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        if self.is_swagger_request:
-            return self.get_swagger_empty_queryset()
-
-        """Return autobids for the current user"""
         return AutoBid.objects.filter(user=self.request.user)
 
     @swagger_auto_schema(
@@ -864,3 +880,211 @@ def create_auction(request):
             'message': 'Error',
             'detail': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def public_auction_detail(request, auction_id):
+    """
+    Get auction details without requiring authentication
+    """
+    try:
+        auction = Auction.objects.get(id=auction_id)
+        serializer = AuctionSerializer(auction)
+        return Response(serializer.data)
+    except Auction.DoesNotExist:
+        return Response({"detail": "Auction not found"}, status=404)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def public_test(request):
+    """
+    Simple endpoint to test public access
+    """
+    return Response({
+        'success': True,
+        'message': 'Public API access is working'
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def api_test(request):
+    """Simple endpoint to test API functionality"""
+    return Response({
+        'success': True,
+        'message': 'API is working properly',
+        'endpoints': {
+            'featured_auctions': '/api/v1/auctions/featured/',
+            'auctions': '/api/v1/auctions/auctions/',
+            'categories': '/api/v1/auctions/categories/',
+            'debug_urls': '/api/v1/auctions/debug-urls/'
+        }
+    })
+
+
+def debug_urls(request):
+    """
+    Debug view that returns all registered URLs in the project.
+    This helps diagnose routing issues.
+    """
+    resolver = get_resolver()
+    url_patterns = {}
+    
+    def collect_patterns(resolver_or_pattern, namespace=''):
+        patterns = []
+        
+        if hasattr(resolver_or_pattern, 'url_patterns'):
+            for pattern in resolver_or_pattern.url_patterns:
+                patterns.extend(collect_patterns(pattern, namespace))
+        elif hasattr(resolver_or_pattern, 'lookup_str'):
+            # ViewPattern - CBV
+            patterns.append({
+                'pattern': str(resolver_or_pattern.pattern),
+                'name': resolver_or_pattern.name,
+                'lookup_str': resolver_or_pattern.lookup_str,
+                'namespace': namespace
+            })
+        elif hasattr(resolver_or_pattern, 'callback'):
+            # RegexPattern - FBV
+            patterns.append({
+                'pattern': str(resolver_or_pattern.pattern),
+                'name': resolver_or_pattern.name,
+                'callback': resolver_or_pattern.callback.__name__,
+                'namespace': namespace
+            })
+        elif hasattr(resolver_or_pattern, 'namespace') and resolver_or_pattern.namespace:
+            # URLResolver with namespace
+            namespace = resolver_or_pattern.namespace
+            for pattern in resolver_or_pattern.url_patterns:
+                patterns.extend(collect_patterns(pattern, namespace))
+        
+        return patterns
+    
+    # Collect all URL patterns
+    all_patterns = collect_patterns(resolver)
+    
+    # Return as JSON response
+    return JsonResponse({
+        'urls': all_patterns,
+        'count': len(all_patterns)
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def disable_auto_bid(request):
+    """Disable auto-bidding for a specific auction"""
+    try:
+        auction_id = request.data.get('auction_id')
+        if not auction_id:
+            return Response({
+                'success': False,
+                'message': 'Auction ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Find the auto-bid for this user and auction
+        auto_bid = AutoBid.objects.filter(
+            user=request.user,
+            auction_id=auction_id,
+            is_active=True
+        ).first()
+        
+        if not auto_bid:
+            return Response({
+                'success': False,
+                'message': 'No active auto-bid found for this auction'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        # Disable the auto-bid
+        auto_bid.is_active = False
+        auto_bid.save()
+        
+        return Response({
+            'success': True,
+            'message': 'Auto-bidding disabled successfully'
+        })
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Error disabling auto-bid: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def featured_auctions(request):
+    """
+    Get a list of featured auctions (newest active auctions)
+    """
+    try:
+        # Get limit parameter, default to 3
+        limit = int(request.query_params.get('limit', 3))
+        
+        # Get current time
+        now = timezone.now()
+        
+        # Get newest active auctions
+        auctions = Auction.objects.filter(
+            status=Auction.STATUS_ACTIVE,
+            end_time__gt=now
+        ).order_by('-created_at')[:limit]
+        
+        serializer = AuctionSerializer(auctions, many=True)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Add this simple view to test if your auctions can be accessed:
+from django.http import JsonResponse
+from .models import Auction, Category
+from django.core.serializers import serialize
+import json
+
+def auctions_api_test(request):
+    """Simple endpoint to test if auctions are in the database"""
+    auctions = Auction.objects.all()[:10]  # Get up to 10 auctions
+    auction_count = Auction.objects.count()
+    
+    categories = Category.objects.all()
+    category_count = Category.objects.count()
+    
+    # Serialize the auctions to JSON
+    auctions_data = json.loads(serialize('json', auctions))
+    formatted_auctions = []
+    
+    for auction in auctions_data:
+        # Extract the model fields
+        fields = auction['fields']
+        # Add the primary key
+        fields['id'] = auction['pk']
+        formatted_auctions.append(fields)
+    
+    # Serialize categories
+    categories_data = json.loads(serialize('json', categories))
+    formatted_categories = []
+    
+    for category in categories_data:
+        fields = category['fields']
+        fields['id'] = category['pk']
+        formatted_categories.append(fields)
+    
+    return JsonResponse({
+        'success': True,
+        'data': {
+            'auction_count': auction_count,
+            'auctions': formatted_auctions,
+            'category_count': category_count,
+            'categories': formatted_categories
+        }
+    })

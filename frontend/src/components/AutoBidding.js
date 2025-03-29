@@ -4,15 +4,19 @@ import '../styles/AutoBidding.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
+const AutoBidding = ({ walletBalance, ...props }) => {
+  // Convert to number at the beginning of the component
+  const balance = Number(walletBalance || 0);
+  
+  console.log('AutoBidding received walletBalance:', typeof balance, balance);
+  
   const [maxAmount, setMaxAmount] = useState('');
-  const [bidIncrement, setBidIncrement] = useState(minBidIncrement || 10);
+  const [bidIncrement, setBidIncrement] = useState(props.minBidIncrement || 10);
   const [hasAutoBid, setHasAutoBid] = useState(false);
   const [autoBidActive, setAutoBidActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
     // Check if user already has an autobid for this auction
@@ -28,7 +32,7 @@ const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
         });
 
         const autobids = response.data?.data || response.data || [];
-        const existingAutoBid = autobids.find(bid => bid.auction === auctionId || bid.auction?.id === auctionId);
+        const existingAutoBid = autobids.find(bid => bid.auction === props.auctionId || bid.auction?.id === props.auctionId);
         
         if (existingAutoBid) {
           setHasAutoBid(true);
@@ -41,28 +45,8 @@ const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
       }
     };
 
-    // Check wallet balance
-    const checkWalletBalance = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        const response = await axios.get(`${API_URL}/api/v1/accounts/wallet/`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        const wallet = response.data?.data || response.data || {};
-        setWalletBalance(wallet.balance || 0);
-      } catch (error) {
-        console.error('Error checking wallet balance:', error);
-      }
-    };
-
     checkAutoBid();
-    checkWalletBalance();
-  }, [auctionId]);
+  }, [props.auctionId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -85,20 +69,20 @@ const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
         return;
       }
 
-      if (maxBid <= parseFloat(currentPrice)) {
-        setError(`Maximum amount must be higher than current price (${currentPrice})`);
+      if (maxBid <= parseFloat(props.currentPrice)) {
+        setError(`Maximum amount must be higher than current price (${props.currentPrice})`);
         setLoading(false);
         return;
       }
 
-      if (maxBid > walletBalance) {
-        setError(`Maximum amount exceeds your wallet balance (${walletBalance})`);
+      if (maxBid > balance) {
+        setError(`Maximum amount exceeds your wallet balance (${balance})`);
         setLoading(false);
         return;
       }
 
       const data = {
-        auction: auctionId,
+        auction: props.auctionId,
         max_amount: maxBid,
         bid_increment: parseFloat(bidIncrement)
       };
@@ -146,7 +130,7 @@ const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
       });
 
       const autobids = response.data?.data || response.data || [];
-      const existingAutoBid = autobids.find(bid => bid.auction === auctionId || bid.auction?.id === auctionId);
+      const existingAutoBid = autobids.find(bid => bid.auction === props.auctionId || bid.auction?.id === props.auctionId);
       
       if (!existingAutoBid) {
         setError('No auto-bid found for this auction');
@@ -177,8 +161,9 @@ const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
   };
 
   return (
-    <div className="auto-bidding-container">
-      <h3>Automatic Bidding</h3>
+    <div className="auto-bidding-section">
+      <h3>Auto-Bidding Settings</h3>
+      <p>Current Balance: ${balance.toFixed(2)}</p>
       
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
@@ -197,7 +182,7 @@ const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
               value={maxAmount}
               onChange={(e) => setMaxAmount(e.target.value)}
               step="0.01"
-              min={currentPrice}
+              min={props.currentPrice}
               required
               disabled={loading}
             />
@@ -212,20 +197,16 @@ const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
               value={bidIncrement}
               onChange={(e) => setBidIncrement(e.target.value)}
               step="0.01"
-              min={minBidIncrement}
+              min={props.minBidIncrement}
               required
               disabled={loading}
             />
-            <p className="form-hint">Amount to increase each time you're outbid (minimum: ${minBidIncrement})</p>
+            <p className="form-hint">Amount to increase each time you're outbid (minimum: ${props.minBidIncrement})</p>
           </div>
           
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? 'Setting up...' : 'Set Up Auto-Bidding'}
           </button>
-          
-          <div className="wallet-info">
-            <p>Your wallet balance: <strong>${walletBalance.toFixed(2)}</strong></p>
-          </div>
         </form>
       ) : (
         <div className="auto-bid-status">

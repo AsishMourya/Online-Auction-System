@@ -23,7 +23,7 @@ def log_transaction_changes(sender, instance, **kwargs):
                 )
 
                 if (
-                    instance.status == Transaction.STATUS_COMPLETED
+                    instance.status == Transaction.STATUS_COMPLETED  # Use constant
                     and not instance.completed_at
                 ):
                     instance.completed_at = timezone.now()

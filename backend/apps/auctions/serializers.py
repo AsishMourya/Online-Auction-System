@@ -4,6 +4,7 @@ from django.db import transaction
 
 from apps.accounts.serializers import UserProfileBasicSerializer
 from .models import Category, Item, Auction, Bid, AuctionWatch
+from apps.transactions.models import AutoBid
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -368,3 +369,10 @@ class AuctionCreateSerializer(serializers.ModelSerializer):
         )
         
         return auction
+
+
+class AutoBidSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AutoBid
+        fields = ['id', 'user', 'auction', 'max_amount', 'bid_increment', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']

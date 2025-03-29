@@ -8,6 +8,7 @@ from django.dispatch import receiver
 import re
 import uuid
 import decimal
+from django.conf import settings
 
 
 def validate_phone_number(value):
@@ -228,88 +229,30 @@ class PaymentMethod(models.Model):
 
 
 class Wallet(models.Model):
-    """User wallet model"""
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="wallet")
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wallet')
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    pending_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    held_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._skip_transaction_log = False
-        self._transaction = None
-
+    
     def __str__(self):
-        return f"Wallet for {self.user.email}: {self.balance}"
-
-    @property
-    def available_balance(self):
-        """Balance available for spending"""
-        return self.balance
-
-    @property
-    def total_balance(self):
-        """Total balance including held and pending funds"""
-        return self.balance + self.pending_balance + self.held_balance
-
-    def deposit(self, amount, transaction=None, skip_log=False):
+        return f"{self.user.username}'s wallet - ${self.balance}"
+    
+    def deposit(self, amount):
         """Add funds to wallet"""
-        if not isinstance(amount, decimal.Decimal):
-            amount = decimal.Decimal(str(amount))
-
-        self._previous_balance = self.balance
+        from decimal import Decimal
+        amount = Decimal(str(amount))
         self.balance += amount
-
-        self._transaction = transaction
-        self._skip_transaction_log = skip_log
-
         self.save()
-        return True
-
+        return self.balance
+        
     def withdraw(self, amount):
-        """Remove funds from wallet if sufficient balance"""
-        if not isinstance(amount, decimal.Decimal):
-            amount = decimal.Decimal(str(amount))
+        """Remove funds from wallet if sufficient balance exists"""
         if self.balance >= amount:
-            self._previous_balance = self.balance
             self.balance -= amount
             self.save()
             return True
         return False
-
-    def hold_funds(self, amount):
-        """Hold funds for pending transactions"""
-        if not isinstance(amount, decimal.Decimal):
-            amount = decimal.Decimal(str(amount))
-        if self.balance >= amount:
-            self._previous_balance = self.balance
-            self.balance -= amount
-            self.held_balance += amount
-            self.save()
-            return True
-        return False
-
-    def release_held_funds(self, amount):
-        """Release previously held funds back to available balance"""
-        if not isinstance(amount, decimal.Decimal):
-            amount = decimal.Decimal(str(amount))
-        if self.held_balance >= amount:
-            self._previous_balance = self.balance
-            self.held_balance -= amount
-            self.balance += amount
-            self.save()
-            return True
-        return False
-
-    def can_withdraw(self, amount):
-        """Check if wallet has sufficient funds"""
-        if not isinstance(amount, decimal.Decimal):
-            amount = decimal.Decimal(str(amount))
-        return self.balance >= amount
 
 
 @receiver(post_save, sender=User)

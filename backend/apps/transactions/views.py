@@ -1,207 +1,185 @@
 from decimal import Decimal
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from django.db import transaction
+from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
+from apps.accounts.models import Wallet
+from .models import Transaction
+from .serializers import TransactionSerializer
+from apps.accounts.serializers import WalletSerializer
 from apps.core.mixins import SwaggerSchemaMixin, ApiResponseMixin
 from apps.core.responses import api_response
 
-from .models import Transaction
-from apps.accounts.models import Wallet
-from .serializers import (
-    TransactionSerializer,
-    WalletSerializer,
-)
-from .services import (
-    process_deposit,
-    process_withdrawal,
-)
 
-
-class TransactionViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet):
-    """API endpoints for user's transaction history"""
-
-    serializer_class = TransactionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        if self.is_swagger_request:
-            return self.get_swagger_empty_queryset()
-
-        user = self.request.user
-        return Transaction.objects.filter(user=user).order_by("-created_at")
-
-    @swagger_auto_schema(
-        operation_id="list_transactions",
-        operation_summary="List transactions",
-        operation_description="Get all transactions for the current user",
-        tags=["Transactions"],
-        manual_parameters=[
-            openapi.Parameter(
-                "transaction_type",
-                openapi.IN_QUERY,
-                description="Filter by transaction type",
-                type=openapi.TYPE_STRING,
-            ),
-            openapi.Parameter(
-                "status",
-                openapi.IN_QUERY,
-                description="Filter by status",
-                type=openapi.TYPE_STRING,
-            ),
-        ],
-        responses={200: TransactionSerializer(many=True)},
-        security=[{"Bearer": []}],
-    )
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-
-        transaction_type = request.query_params.get("transaction_type")
-        if transaction_type:
-            queryset = queryset.filter(transaction_type=transaction_type)
-
-        status_filter = request.query_params.get("status")
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return api_response(
-            data={"transactions": serializer.data},
-            message="Transactions retrieved successfully",
-        )
-
-    @swagger_auto_schema(
-        operation_id="retrieve_transaction",
-        operation_summary="Get transaction details",
-        operation_description="Get details for a specific transaction",
-        tags=["Transactions"],
-        responses={200: TransactionSerializer, 404: "Not found"},
-        security=[{"Bearer": []}],
-    )
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return api_response(
-            data={"transaction": serializer.data},
-            message="Transaction details retrieved successfully",
-        )
-
-    @swagger_auto_schema(
-        operation_id="deposit_funds",
-        operation_summary="Deposit funds",
-        operation_description="Deposit funds into user account",
-        tags=["Transactions"],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "amount": openapi.Schema(
-                    type=openapi.TYPE_NUMBER, description="Amount to deposit"
-                ),
-                "payment_method_id": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    format=openapi.FORMAT_UUID,
-                    description="Payment method to use",
-                ),
-            },
-            required=["amount", "payment_method_id"],
-        ),
-        responses={
-            200: TransactionSerializer,
-            400: "Bad request",
-            404: "Payment method not found",
-        },
-        security=[{"Bearer": []}],
-    )
-    @action(detail=False, methods=["post"])
-    def deposit(self, request):
-        """Deposit funds to user account"""
-        amount = request.data.get("amount")
-        payment_method_id = request.data.get("payment_method_id")
-
-        if not amount or float(amount) <= 0:
-            return api_response(
-                success=False,
-                message="Amount must be greater than zero",
-                status=status.HTTP_400_BAD_REQUEST,
-                errors={"amount": ["Amount must be greater than zero"]},
-            )
-
-        transaction = process_deposit(request.user, amount, payment_method_id)
-
-        if transaction:
-            serializer = self.get_serializer(transaction)
-            return api_response(
-                data={"transaction": serializer.data},
-                message="Deposit processed successfully",
-            )
-        else:
-            return api_response(
-                success=False,
-                message="Failed to process deposit",
-                status=status.HTTP_400_BAD_REQUEST,
-                errors={"detail": "Failed to process deposit"},
-            )
-
-    @swagger_auto_schema(
-        operation_id="withdraw_funds",
-        operation_summary="Withdraw funds",
-        operation_description="Withdraw funds from user account",
-        tags=["Transactions"],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "amount": openapi.Schema(
-                    type=openapi.TYPE_NUMBER, description="Amount to withdraw"
-                ),
-                "payment_method_id": openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    format=openapi.FORMAT_UUID,
-                    description="Payment method to use for withdrawal",
-                ),
-            },
-            required=["amount", "payment_method_id"],
-        ),
-        responses={
-            200: TransactionSerializer,
-            400: "Bad request",
-            404: "Payment method not found",
-        },
-        security=[{"Bearer": []}],
-    )
-    @action(detail=False, methods=["post"])
-    def withdraw(self, request):
-        """Withdraw funds from user account"""
-        amount = request.data.get("amount")
-        payment_method_id = request.data.get("payment_method_id")
-
-        if not amount or float(amount) <= 0:
-            return Response(
-                {"detail": "Amount must be greater than zero."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        transaction = process_withdrawal(request.user, amount, payment_method_id)
-
-        if transaction:
-            serializer = self.get_serializer(transaction)
-            return Response(
-                {
-                    "message": "Withdrawal processed successfully",
-                    "transaction": serializer.data,
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def deposit_funds(request):
+    """Process a wallet deposit"""
+    try:
+        # Debug the incoming request
+        print("Deposit request data:", request.data)
+        
+        # Get amount from request with better error handling
+        try:
+            amount_raw = request.data.get('amount')
+            amount = Decimal(str(amount_raw))
+            print(f"Parsed amount '{amount_raw}' to Decimal: {amount}")
+        except (TypeError, ValueError) as e:
+            print(f"Error parsing amount: {e}")
+            return Response({
+                'success': False,
+                'message': f'Invalid amount value: {amount_raw}. Error: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if amount <= 0:
+            return Response({
+                'success': False, 
+                'message': 'Amount must be greater than zero'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Use a transaction to ensure both operations succeed or fail together
+        with transaction.atomic():
+            # Get or create wallet with defaults for required fields
+            wallet, _ = Wallet.objects.get_or_create(
+                user=request.user,
+                defaults={
+                    'balance': 0,
+                    'held_balance': 0,
+                    'pending_balance': 0
                 }
             )
-        else:
-            return Response(
-                {"detail": "Failed to process withdrawal."},
-                status=status.HTTP_400_BAD_REQUEST,
+            
+            # Update wallet balance directly
+            old_balance = wallet.balance
+            wallet.balance += amount
+            wallet.save()
+            
+            # Use constants from the Transaction model
+            from .models import Transaction
+            
+            # Create transaction record with fields that exist in your model
+            transaction_obj = Transaction.objects.create(
+                user=request.user,
+                transaction_type=Transaction.TYPE_DEPOSIT,  # Use constant
+                amount=amount,
+                status=Transaction.STATUS_COMPLETED,  # Use constant
+                description=f"Wallet deposit of ${amount}",
+                completed_at=timezone.now()
             )
+            
+            # Return response with transaction and updated wallet data
+            return Response({
+                'success': True,
+                'message': f'Successfully deposited ${amount} to your wallet',
+                'transaction': TransactionSerializer(transaction_obj).data,
+                'wallet': {
+                    'id': str(wallet.id),
+                    'balance': float(wallet.balance),
+                    'previous_balance': float(old_balance),
+                    'updated_at': wallet.updated_at.isoformat() if hasattr(wallet, 'updated_at') else None
+                }
+            })
+    except Exception as e:
+        import traceback
+        print(f"Error processing deposit: {str(e)}")
+        print(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': f'Error processing deposit: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def quick_deposit(request):
+    """Quick deposit for development/debugging"""
+    try:
+        # Debug the incoming request
+        print("Quick deposit request data:", request.data)
+        
+        # Get amount from request with better error handling
+        try:
+            amount_raw = request.data.get('amount', 10)
+            amount = Decimal(str(amount_raw))
+            print(f"Parsed amount '{amount_raw}' to: {amount}")
+        except (TypeError, ValueError) as e:
+            print(f"Error parsing amount: {e}")
+            return Response({
+                'success': False,
+                'message': f'Invalid amount value: {amount_raw}. Error: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Use a transaction to ensure both operations succeed or fail together
+        with transaction.atomic():
+            # Get or create wallet with defaults for required fields
+            wallet, _ = Wallet.objects.get_or_create(
+                user=request.user,
+                defaults={
+                    'balance': 0,
+                    'held_balance': 0,
+                    'pending_balance': 0
+                }
+            )
+            
+            # Update wallet balance directly
+            old_balance = wallet.balance
+            wallet.balance += amount
+            wallet.save()
+            
+            # Create transaction record with fields that exist in your model
+            # Use the constants from the Transaction model
+            transaction_obj = Transaction.objects.create(
+                user=request.user,
+                transaction_type=Transaction.TYPE_DEPOSIT,  # Use constant
+                amount=amount,
+                status=Transaction.STATUS_COMPLETED,  # Use constant
+                description=f"Quick deposit of ${amount}",
+                completed_at=timezone.now()
+            )
+            
+            return Response({
+                'success': True,
+                'message': f'Successfully added ${amount} to your wallet',
+                'transaction': TransactionSerializer(transaction_obj).data,
+                'wallet': {
+                    'id': str(wallet.id),
+                    'balance': float(wallet.balance),
+                    'previous_balance': float(old_balance),
+                    'updated_at': wallet.updated_at.isoformat() if hasattr(wallet, 'updated_at') else None
+                }
+            })
+    except Exception as e:
+        import traceback
+        print(f"Error processing quick deposit: {str(e)}")
+        print(traceback.format_exc())
+        return Response({
+            'success': False,
+            'message': f'Error processing quick deposit: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TransactionViewSet(viewsets.ModelViewSet):
+    """API endpoint for transaction management"""
+    serializer_class = TransactionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get transactions for the current user only"""
+        user = self.request.user
+        return Transaction.objects.filter(user=user).order_by('-created_at')
+    
+    def list(self, request, *args, **kwargs):
+        """Override list method to add success field"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
 
 
 @api_view(["GET"])
@@ -321,3 +299,33 @@ class WalletViewSet(ApiResponseMixin, SwaggerSchemaMixin, viewsets.ModelViewSet)
                 status=status.HTTP_400_BAD_REQUEST,
                 errors={"detail": "Failed to process top-up"},
             )
+
+
+# Add this function to process deposits
+def process_deposit(user, amount, payment_method_id=None):
+    """Process a deposit transaction"""
+    try:
+        # Convert amount to Decimal for consistency
+        amount = Decimal(str(amount))
+        
+        # Create the transaction record
+        transaction = Transaction.objects.create(
+            user=user,
+            transaction_type='deposit',
+            amount=amount,
+            status='completed',
+            description=f"Wallet deposit of ${amount}",
+            completed_at=timezone.now()
+        )
+        
+        # Get or create the user's wallet
+        wallet, _ = Wallet.objects.get_or_create(user=user)
+        
+        # Update wallet balance 
+        wallet.balance += amount
+        wallet.save()
+        
+        return transaction
+    except Exception as e:
+        print(f"Error processing deposit: {str(e)}")
+        return None

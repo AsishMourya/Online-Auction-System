@@ -1,84 +1,75 @@
 from django.db import models
 from django.utils import timezone
 import uuid
+from django.conf import settings
+from django.contrib.auth import get_user_model  # Add this import
 
-from apps.accounts.models import User, PaymentMethod
+User = get_user_model()  # Add this line to define User
+
+from apps.accounts.models import PaymentMethod
 
 
 class Transaction(models.Model):
     """Model for financial transactions"""
-
-    TYPE_DEPOSIT = "deposit"
-    TYPE_WITHDRAWAL = "withdrawal"
-    TYPE_PURCHASE = "purchase"
-    TYPE_SALE = "sale"
-    TYPE_FEE = "fee"
-    TYPE_REFUND = "refund"
-    TYPE_BID_HOLD = "bid_hold"
-    TYPE_BID_RELEASE = "bid_release"
-
-    TRANSACTION_TYPES = [
-        (TYPE_DEPOSIT, "Deposit"),
-        (TYPE_WITHDRAWAL, "Withdrawal"),
-        (TYPE_PURCHASE, "Purchase"),
-        (TYPE_SALE, "Sale"),
-        (TYPE_FEE, "Platform Fee"),
-        (TYPE_REFUND, "Refund"),
-        (TYPE_BID_HOLD, "Bid Hold"),
-        (TYPE_BID_RELEASE, "Bid Release"),
-    ]
-
-    STATUS_PENDING = "pending"
-    STATUS_PROCESSING = "processing"
-    STATUS_COMPLETED = "completed"
-    STATUS_FAILED = "failed"
-    STATUS_CANCELLED = "cancelled"
-    STATUS_REFUNDED = "refunded"
-
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "Pending"),
-        (STATUS_PROCESSING, "Processing"),
-        (STATUS_COMPLETED, "Completed"),
-        (STATUS_FAILED, "Failed"),
-        (STATUS_CANCELLED, "Cancelled"),
-        (STATUS_REFUNDED, "Refunded"),
-    ]
-
+    
+    # Transaction type constants
+    TYPE_DEPOSIT = 'deposit'
+    TYPE_WITHDRAWAL = 'withdrawal'
+    TYPE_PAYMENT = 'payment'
+    TYPE_REFUND = 'refund'
+    TYPE_FEE = 'fee'
+    TYPE_PURCHASE = 'purchase'
+    TYPE_SALE = 'sale'
+    TYPE_BID_HOLD = 'bid_hold'
+    TYPE_BID_RELEASE = 'bid_release'
+    
+    TRANSACTION_TYPES = (
+        (TYPE_DEPOSIT, 'Deposit'),
+        (TYPE_WITHDRAWAL, 'Withdrawal'),
+        (TYPE_PAYMENT, 'Payment'),
+        (TYPE_REFUND, 'Refund'),
+        (TYPE_FEE, 'Fee'),
+        (TYPE_PURCHASE, 'Purchase'),
+        (TYPE_SALE, 'Sale'),
+        (TYPE_BID_HOLD, 'Bid Hold'),
+        (TYPE_BID_RELEASE, 'Bid Release'),
+    )
+    
+    # Status constants
+    STATUS_PENDING = 'pending'
+    STATUS_COMPLETED = 'completed'
+    STATUS_FAILED = 'failed'
+    STATUS_CANCELLED = 'cancelled'
+    
+    STATUS_CHOICES = (
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    )
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="transactions"
-    )
-    transaction_type = models.CharField(
-        max_length=20, choices=TRANSACTION_TYPES, db_index=True
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True
-    )
-    payment_method = models.ForeignKey(
-        PaymentMethod, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    reference = models.CharField(max_length=255, null=True, blank=True)
-    reference_id = models.UUIDField(null=True, blank=True)
+    status = models.CharField(max_length=20, default=STATUS_PENDING, choices=STATUS_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    completed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["user", "transaction_type"]),
-            models.Index(fields=["status", "created_at"]),
-            models.Index(fields=["reference_id"]),
-        ]
-
+    description = models.CharField(max_length=255, null=True, blank=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    reference = models.CharField(max_length=255, blank=True, null=True)
+    reference_id = models.UUIDField(blank=True, null=True)
+    payment_method = models.ForeignKey('accounts.PaymentMethod', on_delete=models.SET_NULL, null=True, blank=True)
+    
     def __str__(self):
-        return f"{self.transaction_type} - {self.amount} ({self.get_status_display()})"
-
-    def save(self, *args, **kwargs):
-        if self.status == self.STATUS_COMPLETED and not self.completed_at:
-            self.completed_at = timezone.now()
-        super().save(*args, **kwargs)
+        return f"{self.transaction_type} - ${self.amount} - {self.status}"
+        
+    def mark_completed(self):
+        """Mark the transaction as completed and set completed_at timestamp"""
+        from django.utils import timezone
+        self.status = self.STATUS_COMPLETED
+        self.completed_at = timezone.now()
+        self.save()
 
 
 class TransactionLog(models.Model):
@@ -105,7 +96,7 @@ class AutoBid(models.Model):
     """Model for automatic bidding settings"""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="autobids")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="autobids")
     auction = models.ForeignKey(
         "auctions.Auction", on_delete=models.CASCADE, related_name="autobids"
     )
