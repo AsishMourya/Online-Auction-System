@@ -1,22 +1,49 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import '../styles/AutoBidding.css';
+import { useWallet } from '../contexts/WalletContext';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-const AutoBidding = ({ walletBalance, ...props }) => {
-  // Convert to number at the beginning of the component
+const AutoBidding = ({ auctionId, currentPrice, minBidIncrement }) => {
+  // Get wallet balance directly from context instead of props
+  const { walletBalance } = useWallet();
+  
+  // Add a ref to track if we've already fetched data
+  const hasInitializedRef = useRef(false);
+  
+  // Add this useEffect to log wallet balance changes
+  useEffect(() => {
+    console.log('AutoBidding: Current wallet balance:', walletBalance);
+  }, [walletBalance]);
+
   const balance = Number(walletBalance || 0);
   
-  console.log('AutoBidding received walletBalance:', typeof balance, balance);
-  
   const [maxAmount, setMaxAmount] = useState('');
-  const [bidIncrement, setBidIncrement] = useState(props.minBidIncrement || 10);
+  const [bidIncrement, setBidIncrement] = useState(minBidIncrement || 10);
   const [hasAutoBid, setHasAutoBid] = useState(false);
   const [autoBidActive, setAutoBidActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    // Only run this once
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      
+      console.log('AutoBidding: Initial setup');
+    }
+    
+    // Instead of calling APIs directly, set up a polling interval
+    const pollInterval = setInterval(() => {
+      // Your polling code - limit API calls to necessary ones
+    }, 30000); // Poll every 30 seconds instead of continuously
+    
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, []); // Empty dependency array = only run on mount
 
   useEffect(() => {
     // Check if user already has an autobid for this auction
@@ -32,7 +59,7 @@ const AutoBidding = ({ walletBalance, ...props }) => {
         });
 
         const autobids = response.data?.data || response.data || [];
-        const existingAutoBid = autobids.find(bid => bid.auction === props.auctionId || bid.auction?.id === props.auctionId);
+        const existingAutoBid = autobids.find(bid => bid.auction === auctionId || bid.auction?.id === auctionId);
         
         if (existingAutoBid) {
           setHasAutoBid(true);
@@ -46,7 +73,7 @@ const AutoBidding = ({ walletBalance, ...props }) => {
     };
 
     checkAutoBid();
-  }, [props.auctionId]);
+  }, [auctionId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -69,8 +96,8 @@ const AutoBidding = ({ walletBalance, ...props }) => {
         return;
       }
 
-      if (maxBid <= parseFloat(props.currentPrice)) {
-        setError(`Maximum amount must be higher than current price (${props.currentPrice})`);
+      if (maxBid <= parseFloat(currentPrice)) {
+        setError(`Maximum amount must be higher than current price (${currentPrice})`);
         setLoading(false);
         return;
       }
@@ -82,7 +109,7 @@ const AutoBidding = ({ walletBalance, ...props }) => {
       }
 
       const data = {
-        auction: props.auctionId,
+        auction: auctionId,
         max_amount: maxBid,
         bid_increment: parseFloat(bidIncrement)
       };
@@ -130,7 +157,7 @@ const AutoBidding = ({ walletBalance, ...props }) => {
       });
 
       const autobids = response.data?.data || response.data || [];
-      const existingAutoBid = autobids.find(bid => bid.auction === props.auctionId || bid.auction?.id === props.auctionId);
+      const existingAutoBid = autobids.find(bid => bid.auction === auctionId || bid.auction?.id === auctionId);
       
       if (!existingAutoBid) {
         setError('No auto-bid found for this auction');
@@ -163,7 +190,7 @@ const AutoBidding = ({ walletBalance, ...props }) => {
   return (
     <div className="auto-bidding-section">
       <h3>Auto-Bidding Settings</h3>
-      <p>Current Balance: ${balance.toFixed(2)}</p>
+      <p>Available balance: ${parseFloat(walletBalance).toFixed(2)}</p>
       
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}
@@ -182,7 +209,7 @@ const AutoBidding = ({ walletBalance, ...props }) => {
               value={maxAmount}
               onChange={(e) => setMaxAmount(e.target.value)}
               step="0.01"
-              min={props.currentPrice}
+              min={currentPrice}
               required
               disabled={loading}
             />
@@ -197,11 +224,11 @@ const AutoBidding = ({ walletBalance, ...props }) => {
               value={bidIncrement}
               onChange={(e) => setBidIncrement(e.target.value)}
               step="0.01"
-              min={props.minBidIncrement}
+              min={minBidIncrement}
               required
               disabled={loading}
             />
-            <p className="form-hint">Amount to increase each time you're outbid (minimum: ${props.minBidIncrement})</p>
+            <p className="form-hint">Amount to increase each time you're outbid (minimum: ${minBidIncrement})</p>
           </div>
           
           <button type="submit" className="btn btn-primary" disabled={loading}>

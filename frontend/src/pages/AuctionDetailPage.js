@@ -4,6 +4,7 @@ import axios from 'axios';
 import '../styles/AuctionDetailPage.css';
 import AutoBidding from '../components/AutoBidding';
 import api from '../services/api';
+import { useWallet } from '../contexts/WalletContext';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -24,7 +25,7 @@ const AuctionDetailPage = () => {
   const [timeLeft, setTimeLeft] = useState('');
   const [activeTab, setActiveTab] = useState('Description');
   const [similarAuctions, setSimilarAuctions] = useState([]);
-  const [walletBalance, setWalletBalance] = useState(0);
+  const { walletBalance } = useWallet();
   const isLoggedIn = localStorage.getItem('token') !== null;
 
   // Move the API connectivity test inside the component
@@ -43,30 +44,6 @@ const AuctionDetailPage = () => {
         console.error('API connectivity test failed', error.message);
       });
   }, []);
-
-  useEffect(() => {
-    const fetchWalletBalance = async () => {
-      if (!isLoggedIn) return;
-      
-      try {
-        const response = await api.getWallet();
-        if (response.data) {
-          // Handle different response formats
-          if (response.data.balance) {
-            setWalletBalance(Number(response.data.balance));
-          } else if (response.data.data && response.data.data.balance) {
-            setWalletBalance(Number(response.data.data.balance));
-          } else if (response.data.wallet && response.data.wallet.balance) {
-            setWalletBalance(Number(response.data.wallet.balance));
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching wallet balance:', error);
-      }
-    };
-    
-    fetchWalletBalance();
-  }, [isLoggedIn]);
 
   const fetchBids = async (auctionId) => {
     try {
@@ -527,7 +504,9 @@ const AuctionDetailPage = () => {
       console.log('Min increment:', minIncrement);
       console.log('Calculated minimum bid:', minimumBid);
       console.log('User bid:', bidValue);
+      console.log('Wallet balance:', walletBalance);
 
+      // Validation checks
       if (isNaN(bidValue)) {
         setError('Please enter a valid amount');
         return;
@@ -545,72 +524,133 @@ const AuctionDetailPage = () => {
         return;
       }
 
+      // Check if user has enough balance in wallet
+      if (bidValue > parseFloat(walletBalance)) {
+        setError(`Insufficient funds in your wallet. Your balance: $${formatCurrency(walletBalance)}`);
+        return;
+      }
+
       setError('');
 
-      let response;
+      // Use the API service instead of direct axios calls
       try {
-        const auctionBidEndpoint = `/api/v1/auctions/auctions/${id}/bid/`;
-        console.log(`Sending bid to: ${API_URL}${auctionBidEndpoint}`);
-
-        response = await axios.post(`${API_URL}${auctionBidEndpoint}`, {
-          amount: bidValue
-        }, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-      } catch (auctionEndpointError) {
-        const generalBidEndpoint = `/api/v1/auctions/bids/`;
-        console.log(`Sending bid to: ${API_URL}${generalBidEndpoint}`);
-
-        response = await axios.post(`${API_URL}${generalBidEndpoint}`, {
+        const response = await api.placeBid(id, {
           amount: bidValue,
           auction_id: id
-        }, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+        });
+        
+        console.log('Bid response:', response);
+
+        if (response.data && (response.data.success || response.status === 201 || response.status === 200)) {
+          setAuction({
+            ...auction,
+            currentBid: bidValue
+          });
+
+          const newBid = {
+            id: Date.now(),
+            bidder: 'You',
+            bidder_id: localStorage.getItem('user_id'),
+            amount: bidValue,
+            time: new Date().toISOString()
+          };
+
+          setBids([newBid, ...bids]);
+          setBidSuccess(true);
+          setBidAmount((bidValue + auction.minBidIncrement).toFixed(2));
+
+          setTimeout(() => {
+            setBidSuccess(false);
+          }, 3000);
+        } else {
+          setError(response.data?.message || 'Failed to place bid');
+        }
+      } catch (apiError) {
+        console.error('API service error during bid:', apiError);
+        
+        // Try direct axios calls as fallback
+        try {
+          const auctionBidEndpoint = `/api/v1/auctions/auctions/${id}/bid/`;
+          console.log(`Sending bid to: ${API_URL}${auctionBidEndpoint}`);
+
+          const response = await axios.post(`${API_URL}${auctionBidEndpoint}`, {
+            amount: bidValue
+          }, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log('Direct bid response:', response.data);
+          
+          if (response.data && (response.data.success || response.status === 201)) {
+            setAuction({
+              ...auction,
+              currentBid: bidValue
+            });
+
+            const newBid = {
+              id: Date.now(),
+              bidder: 'You',
+              bidder_id: localStorage.getItem('user_id'),
+              amount: bidValue,
+              time: new Date().toISOString()
+            };
+
+            setBids([newBid, ...bids]);
+            setBidSuccess(true);
+            setBidAmount((bidValue + auction.minBidIncrement).toFixed(2));
+
+            setTimeout(() => {
+              setBidSuccess(false);
+            }, 3000);
+          } else {
+            setError(response.data?.message || 'Failed to place bid with specific endpoint');
           }
-        });
-      }
-
-      console.log('Bid response:', response.data);
-
-      if (response.data && response.data.success) {
-        setAuction({
-          ...auction,
-          currentBid: bidValue
-        });
-
-        const newBid = {
-          id: Date.now(),
-          bidder: 'You',
-          bidder_id: localStorage.getItem('user_id'),
-          amount: bidValue,
-          time: new Date().toISOString()
-        };
-
-        setBids([newBid, ...bids]);
-        setBidSuccess(true);
-        setBidAmount(bidValue + auction.minBidIncrement);
-
-        setTimeout(() => {
-          setBidSuccess(false);
-        }, 3000);
-      } else {
-        setError(response.data?.message || 'Failed to place bid');
+        } catch (error) {
+          console.error('Error placing bid through direct endpoint:', error);
+          handleBidError(error);
+        }
       }
     } catch (error) {
-      console.error('Error placing bid:', error);
+      console.error('Error in bid function:', error);
+      handleBidError(error);
+    }
+  };
 
-      if (error.response) {
-        setError(`Error ${error.response.status}: ${error.response.data?.message || 'Failed to place bid'}`);
-      } else if (error.request) {
-        setError('Network error. Please check your connection and try again.');
+  // Add this helper function for better error handling
+  const handleBidError = (error) => {
+    console.error('Detailed bid error:', error);
+    
+    if (error.response) {
+      console.error('Error response status:', error.response.status);
+      console.error('Error response data:', error.response.data);
+      
+      // Handle specific error cases
+      if (error.response.status === 400) {
+        if (error.response.data?.message) {
+          setError(error.response.data.message);
+        } else if (error.response.data?.detail) {
+          setError(error.response.data.detail);
+        } else if (error.response.data?.errors?.amount) {
+          setError(error.response.data.errors.amount);
+        } else {
+          setError('Invalid bid. Please check your bid amount and try again.');
+        }
+      } else if (error.response.status === 401) {
+        setError('Your session has expired. Please log in again.');
+      } else if (error.response.status === 403) {
+        setError('You are not authorized to bid on this auction.');
+      } else if (error.response.status === 404) {
+        setError('Auction not found or bidding endpoint not available.');
       } else {
-        setError('Error: ' + error.message);
+        setError(`Error ${error.response.status}: ${error.response.data?.message || 'Failed to place bid'}`);
       }
+    } else if (error.request) {
+      setError('Network error. Please check your connection and try again.');
+    } else {
+      setError('Error: ' + error.message);
     }
   };
 
@@ -756,12 +796,36 @@ const AuctionDetailPage = () => {
                     <p>Bid increment: ${formatCurrency(auction.minBidIncrement)}</p>
                   </div>
 
+                  <div className="bid-preview">
+                    <h4>Bid Summary</h4>
+                    <div className="bid-summary">
+                      <div className="summary-row">
+                        <span>Your bid amount:</span>
+                        <span>${bidAmount ? formatCurrency(parseFloat(bidAmount)) : '0.00'}</span>
+                      </div>
+                      <div className="summary-row">
+                        <span>Your wallet balance:</span>
+                        <span>${formatCurrency(parseFloat(walletBalance))}</span>
+                      </div>
+                      <div className="summary-row balance-after">
+                        <span>Balance after bid:</span>
+                        <span>${formatCurrency(Math.max(0, parseFloat(walletBalance) - (parseFloat(bidAmount) || 0)))}</span>
+                      </div>
+                    </div>
+                    
+                    {parseFloat(bidAmount) > parseFloat(walletBalance) && (
+                      <div className="insufficient-funds-warning">
+                        ⚠️ Warning: Your bid amount exceeds your wallet balance. 
+                        <Link to="/wallet" className="add-funds-link">Add Funds</Link>
+                      </div>
+                    )}
+                  </div>
+
                   {isLoggedIn && auction.seller.id !== localStorage.getItem('user_id') && (
                     <AutoBidding 
                       auctionId={auction.id} 
                       currentPrice={auction.currentBid} 
                       minBidIncrement={auction.minBidIncrement}
-                      walletBalance={walletBalance}
                     />
                   )}
                 </div>
@@ -1088,6 +1152,45 @@ Error connecting to database. Possible solutions:
                 }}
               >
                 Test Authentication
+              </button>
+            </div>
+            
+            <div style={{ marginTop: '20px' }}>
+              <h4>Wallet Information</h4>
+              <div style={{ marginBottom: '10px' }}>
+                <strong>Current Wallet Balance:</strong> ${parseFloat(walletBalance).toFixed(2)}
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={async () => {
+                  try {
+                    // Try to fetch the wallet balance directly
+                    const token = localStorage.getItem('token');
+                    if (!token) {
+                      alert('No token found. Please log in to check wallet.');
+                      return;
+                    }
+                    
+                    const response = await axios.get(`${API_URL}/api/v1/accounts/wallet/`, {
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    console.log('Wallet response:', response.data);
+                    
+                    if (response.data?.data?.balance !== undefined) {
+                      alert(`Backend reports wallet balance: $${parseFloat(response.data.data.balance).toFixed(2)}\nFrontend shows: $${walletBalance}`);
+                    } else if (response.data?.balance !== undefined) {
+                      alert(`Backend reports wallet balance: $${parseFloat(response.data.balance).toFixed(2)}\nFrontend shows: $${walletBalance}`);
+                    } else {
+                      alert('Could not find wallet balance in API response');
+                    }
+                  } catch (error) {
+                    console.error('Wallet test failed:', error);
+                    alert(`Wallet test failed: ${error.message}`);
+                  }
+                }}
+              >
+                Test Wallet Balance
               </button>
             </div>
           </div>
