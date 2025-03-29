@@ -17,7 +17,6 @@ const AuctionsPage = () => {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [error, setError] = useState('');
-  const [debugInfo, setDebugInfo] = useState(null);
   const [backendStatus, setBackendStatus] = useState('unknown');
 
   useEffect(() => {
@@ -120,7 +119,6 @@ const AuctionsPage = () => {
     const fetchAuctions = async () => {
       setLoading(true);
       setError('');
-      setDebugInfo(null);
       
       try {
         // Prepare query parameters
@@ -212,13 +210,6 @@ const AuctionsPage = () => {
             console.warn(`Failed to fetch auctions from ${endpoint}:`, error.message);
           }
         }
-        
-        // Save debug info with the endpoint that worked
-        setDebugInfo({
-          apiResponse: responseData,
-          endpoint: successEndpoint,
-          params: params
-        });
         
         // If no auctions were found through any API endpoint, we won't use mocks - just show empty
         if (auctionsData.length === 0) {
@@ -528,24 +519,6 @@ const AuctionsPage = () => {
                 </div>
               </div>
             ))}
-          </div>
-        )}
-        
-        {process.env.NODE_ENV === 'development' && debugInfo && (
-          <div className="debug-section" style={{margin: '30px 0', padding: '15px', border: '1px dashed #ccc', borderRadius: '5px'}}>
-            <h3>Debug Information</h3>
-            <p><strong>API URL:</strong> {API_URL}</p>
-            <p><strong>Backend Status:</strong> {backendStatus}</p>
-            {debugInfo.endpoint && <p><strong>Endpoint Used:</strong> {debugInfo.endpoint}</p>}
-            {debugInfo.params && <p><strong>Params:</strong> {JSON.stringify(debugInfo.params)}</p>}
-            <div>
-              <button 
-                className="btn btn-small"
-                onClick={() => console.log('Debug Info:', debugInfo)}
-              >
-                Log Full Debug Info to Console
-              </button>
-            </div>
           </div>
         )}
       </div>

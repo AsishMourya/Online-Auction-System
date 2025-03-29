@@ -86,12 +86,23 @@ const ProfilePage = () => {
     });
   };
 
+  const handleLogout = () => {
+    // Clear wallet data
+    localStorage.removeItem('wallet_balance_' + userData?.id); // Use appropriate user ID
+    localStorage.removeItem('user_info');
+    localStorage.removeItem('token');
+    
+    // Navigate to login page
+    navigate('/login');
+    
+    // Dispatch auth change event
+    window.dispatchEvent(new CustomEvent('auth-change', { 
+      detail: { authenticated: false }
+    }));
+  };
+
   useEffect(() => {
     const fetchUserData = async () => {
-      console.log('Environment:', process.env.NODE_ENV);
-      console.log('Seller ID from URL:', sellerId);
-      console.log('API URL being used:', API_URL);
-
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
@@ -157,7 +168,9 @@ const ProfilePage = () => {
         
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching profile data:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error fetching profile data:', error);
+        }
         
         // Always use mock data in development when API fails
         if (process.env.NODE_ENV === 'development') {
@@ -286,6 +299,13 @@ const ProfilePage = () => {
                 >
                   Manage Wallet
                 </button>
+                
+                <button 
+                  className="btn btn-danger" 
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
               </div>
             )}
           </div>
@@ -377,49 +397,6 @@ const ProfilePage = () => {
                     <Link to="/create-auction" className="btn btn-secondary">
                       Create New Auction
                     </Link>
-                  </div>
-                )}
-                
-                {process.env.NODE_ENV === 'development' && isCurrentUser && (
-                  <div className="debug-section" style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f5f5f5', borderRadius: '5px' }}>
-                    <h3>Development Tools</h3>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{ marginRight: '10px' }}
-                      onClick={async () => {
-                        try {
-                          console.log('Testing auction endpoints...');
-                          
-                          // Define headers here since we're outside fetchUserData scope
-                          const token = localStorage.getItem('token');
-                          const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-                          
-                          // Try various endpoints
-                          const endpoints = [
-                            '/api/v1/auctions/auctions/my_auctions/',
-                            '/api/v1/auctions/auctions/?seller_id=' + userData.id,
-                            '/api/v1/auctions/auctions/user/' + userData.id,
-                          ];
-                          
-                          for (const endpoint of endpoints) {
-                            try {
-                              console.log(`Testing endpoint: ${endpoint}`);
-                              const response = await axios.get(`${API_URL}${endpoint}`, { headers });
-                              console.log(`Response from ${endpoint}:`, response.data);
-                            } catch (error) {
-                              console.error(`Error with ${endpoint}:`, error.response || error);
-                            }
-                          }
-                          
-                          alert('Check the console for details');
-                        } catch (error) {
-                          console.error('Error testing endpoints:', error);
-                          alert('Error: ' + (error.message || 'Unknown error'));
-                        }
-                      }}
-                    >
-                      Test Auction Endpoints
-                    </button>
                   </div>
                 )}
               </div>

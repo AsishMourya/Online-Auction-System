@@ -362,33 +362,6 @@ const HomePage = () => {
           </div>
         </section>
 
-        {/* Testimonials section */}
-        <section className="testimonials-section">
-          <div className="container">
-            <h2>What Our Users Say</h2>
-            <div className="testimonials-container">
-              <div className="testimonial">
-                <p>"I found a rare collector's item that I'd been searching for years. Great platform!"</p>
-                <div className="user">
-                  <strong>Sarah M.</strong>
-                </div>
-              </div>
-              <div className="testimonial">
-                <p>"The bidding process is smooth and transparent. I've both sold and purchased items here."</p>
-                <div className="user">
-                  <strong>Michael K.</strong>
-                </div>
-              </div>
-              <div className="testimonial">
-                <p>"Customer support was excellent when I had questions about a payment."</p>
-                <div className="user">
-                  <strong>Priya R.</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* Call-to-action section */}
         <section className="cta-section">
           <div className="container">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './pages/Navbar';
 import HomePage from './pages/HomePage';
@@ -14,6 +14,34 @@ import { WalletProvider } from './contexts/WalletContext'; // Add WalletProvider
 import './App.css';
 
 function App() {
+  // Add effect to handle auth changes
+  useEffect(() => {
+    // Function to handle authentication changes
+    const handleAuthChange = () => {
+      const token = localStorage.getItem('token');
+      console.log('Auth status changed:', token ? 'logged in' : 'logged out');
+      
+      // Dispatch custom event for components to listen to
+      window.dispatchEvent(new CustomEvent('auth-change', { 
+        detail: { authenticated: !!token }
+      }));
+    };
+    
+    // Listen for storage events (login/logout in other tabs)
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'token' || e.key === 'user_info') {
+        handleAuthChange();
+      }
+    });
+    
+    // Check initial auth status
+    handleAuthChange();
+    
+    return () => {
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
+
   return (
     <WalletProvider> {/* Wrap the app content with WalletProvider */}
       <Router>

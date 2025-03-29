@@ -12,6 +12,7 @@ const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { walletBalance } = useWallet();
   const navigate = useNavigate();
+  const [userInfo, setUserInfo] = useState(null);
 
   // Check login status whenever the component mounts or token changes
   useEffect(() => {
@@ -43,14 +44,64 @@ const Navbar = () => {
     console.log('Navbar: Current wallet balance:', walletBalance);
   }, [walletBalance]);
 
+  // Add auth change listener
+  useEffect(() => {
+    const handleAuthChange = async (e) => {
+      const isAuthenticated = e?.detail?.authenticated ?? !!localStorage.getItem('token');
+      setIsLoggedIn(isAuthenticated);
+      
+      if (isAuthenticated) {
+        // Get user info
+        try {
+          const storedUserInfo = localStorage.getItem('user_info');
+          if (storedUserInfo) {
+            setUserInfo(JSON.parse(storedUserInfo));
+          } else {
+            // Fetch user info
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`${API_URL}/api/v1/accounts/user/`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (response.data) {
+              const userData = response.data.data || response.data;
+              setUserInfo(userData);
+              localStorage.setItem('user_info', JSON.stringify(userData));
+            }
+          }
+        } catch (e) {
+          console.error('Error processing user info:', e);
+        }
+      } else {
+        // Clear user info on logout
+        setUserInfo(null);
+      }
+    };
+    
+    // Listen for auth change events
+    window.addEventListener('auth-change', handleAuthChange);
+    
+    // Check initial auth status
+    handleAuthChange();
+    
+    return () => {
+      window.removeEventListener('auth-change', handleAuthChange);
+    };
+  }, []);
+
   const handleLogout = () => {
     // Clear all auth-related data
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
+    localStorage.removeItem('user_info');
     
     // Update auth state
     setIsLoggedIn(false);
+    setUserInfo(null);
     
     // Dispatch event to notify other components
     window.dispatchEvent(new Event('authStateChanged'));
@@ -92,11 +143,9 @@ const Navbar = () => {
               </li>
               <li className="nav-item">
                 <Link to="/wallet" className="wallet-balance" onClick={(e) => {
-                  // Prevent default here to avoid the flickering
-                  if (!walletBalance || walletBalance <= 0) {
-                    // Only navigate programmatically after a short delay
+                  // Prevent navigation if already on wallet page
+                  if (window.location.pathname === '/wallet') {
                     e.preventDefault();
-                    setTimeout(() => navigate('/wallet'), 50);
                   }
                 }}>
                   <span className="wallet-icon">💰</span>
@@ -114,6 +163,13 @@ const Navbar = () => {
               </li>
               <li className="nav-item nav-notifications">
                 <NotificationCenter />
+              </li>
+              <li className="nav-item user-section">
+                {userInfo && (
+                  <span className="user-greeting">
+                    Hello, {userInfo.username || userInfo.name || 'User'}
+                  </span>
+                )}
               </li>
             </>
           ) : (
